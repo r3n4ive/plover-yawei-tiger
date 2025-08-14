@@ -1,0 +1,6 @@
+# 分析词表中包含特定字或词的词语有多少
+./analysis.py
+# 替换词缀
+./replace_fix.py
+# root型特定字过滤
+./root_filter.py

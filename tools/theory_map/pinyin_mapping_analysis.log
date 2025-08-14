@@ -1,0 +1,19 @@
+=== 一对多（一个拼音 → 多个编码） ===
+ding -> DINE DIN
+fa -> XBUA BIU
+hua -> XGUA XGW
+kuai -> XBGIUO XBGI
+leng -> XDN XDNE
+teng -> BDNE BDN
+ting -> BDIN BDINE
+
+=== 多对一（多个拼音 → 一个编码） ===
+E <- ei e
+O <- o wo
+UEO <- ong weng
+XDO <- luo lo
+
+总拼音数: 415
+总编码数: 418
+一对多数量: 7
+多对一数量: 4

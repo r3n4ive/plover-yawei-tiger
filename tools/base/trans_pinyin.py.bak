@@ -1,0 +1,107 @@
+import os
+
+def load_tedingzi(filename):
+    mapping = {}
+    with open(filename, "r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            if "\t" not in line:
+                continue
+            char, code = line.split("\t", 1)
+            mapping[char] = code
+    return mapping
+
+def load_pinyin_map(filename):
+    mapping = {}
+    with open(filename, "r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            if "\t" not in line:
+                continue
+            py, code = line.split("\t", 1)
+            mapping[py] = code
+    return mapping
+
+def interleaved_join(codes):
+    if not codes:
+        return ""
+    result = codes[0]
+    for idx, code in enumerate(codes[1:], 1):
+        sep = "-" if idx % 2 == 1 else "/"
+        result += sep + code
+    return result
+
+def process_word_table(base_file, tedingzi_map, pinyin_map, output_file, log_file):
+    bad_lines = []
+    converted_lines = []
+
+    with open(base_file, "r", encoding="utf-8") as f:
+        for line_no, line in enumerate(f, 1):
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            parts = line.split("\t")
+            if len(parts) != 3:
+                bad_lines.append(f"格式错误: {line_no}: {line}")
+                continue
+
+            word, pinyin_str, freq = parts
+            chars = list(word)
+            pinyins = pinyin_str.split()
+
+            if len(chars) != len(pinyins):
+                bad_lines.append(f"字数与音节数不匹配: {line_no}: {line}")
+                continue
+
+            converted_syllables = []
+            missing_mapping = False
+            for ch, py in zip(chars, pinyins):
+                if ch in tedingzi_map:
+                    converted_syllables.append(tedingzi_map[ch])
+                elif py in pinyin_map:
+                    converted_syllables.append(pinyin_map[py])
+                else:
+                    missing_mapping = True
+                    bad_lines.append(f"缺少拼音映射: {line_no}: {line}")
+                    break
+            if missing_mapping:
+                continue
+
+            code = interleaved_join(converted_syllables)
+            converted_lines.append(f"{word}\t{code}\t{freq}")
+
+    # 写输出文件
+    with open(output_file, "w", encoding="utf-8") as outf:
+        for line in converted_lines:
+            outf.write(line + "\n")
+
+    # 写 log 文件
+    with open(log_file, "w", encoding="utf-8") as lf:
+        lf.write("处理异常行:\n")
+        for bl in bad_lines:
+            lf.write(bl + "\n")
+        lf.write(f"\n总行数: {line_no}\n")
+        lf.write(f"成功转换行数: {len(converted_lines)}\n")
+        lf.write(f"异常行数: {len(bad_lines)}\n")
+
+def main():
+    # 是否将特定字发音全部引入词库
+    # tedingzi_map = load_tedingzi("tedingzi.txt")
+    tedingzi_map = {}
+    pinyin_map = load_pinyin_map("pinyin_to_virtual_keys.txt")
+
+    process_word_table(
+        base_file="base.dict.yaml",
+        tedingzi_map=tedingzi_map,
+        pinyin_map=pinyin_map,
+        output_file="base.converted.txt.temp",
+        log_file="trans_pinyin.log"
+    )
+
+if __name__ == "__main__":
+    main()
+

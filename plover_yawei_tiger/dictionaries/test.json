@@ -1,0 +1,15 @@
+{
+    "I-XZ": "=CANDIDATE:{^意识},{^一是},{^一时}",
+    "IUE-XDIO/IUE-XINO": "=CANDIDATE:越来越像,越来越响,越来越想,越来越向,越来越香",
+    "XBDA-XDI/ZAO-D": "=CANDIDATE:{^哪里找的},{^那里找的},{^那里照的},{^哪里照的}",
+    "IUNE-IU": "{mode:set_space:}",
+    "IU-IUNE": "{mode:set_space: }",
+    "IUNE-IUNE/IUNE-IUNE": "一地在要工,上是中国同和的有人我,abcdefghijklmnopqrst uvw,xyz",
+    "I-XZ/XN-D": "{^}仪式",
+    "UO-D": " {mode:set_space:}",
+    "UO-Z": " {mode:reset_space}",
+    "UO-G": "{^ ^}",
+    "UO-X": "{mode:reset_space}{^ ^}{mode:set_space:}",
+    "UO-I": "=CANDIDATE:NEXT",
+    "UO-U": "=CANDIDATE:PREVIOUS"
+}

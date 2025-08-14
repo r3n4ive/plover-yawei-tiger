@@ -1,0 +1,2 @@
+include plover_aw_chinese/dictionaries/*.json
+prune tools
