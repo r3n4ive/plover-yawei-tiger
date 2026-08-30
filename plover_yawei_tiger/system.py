@@ -56,6 +56,12 @@ KEYMAPS = {
     }
 }
 
+# The HID machine emits these logical Yawei key names directly.  Keeping an
+# explicit identity map makes the machine selectable in Plover 4's keymap UI.
+KEYMAPS['Yawei V3'] = {
+    key: key for key in KEYS
+}
+
 DICTIONARIES_ROOT = 'asset:plover_yawei_tiger:dictionaries'
 
 DEFAULT_DICTIONARIES = (
