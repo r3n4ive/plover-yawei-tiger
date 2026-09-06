@@ -77,12 +77,11 @@ def _is_control_mapping(mapping):
 
     if not mapping:
         return False
-    # Commands, macros, key combinations and mode changes are the explicit
-    # control layer.  Attached literal text (``{^foo^}``) is intentionally not
-    # classified as control: it is still a normal dictionary translation.
-    if mapping.startswith("="):
-        return True
-    return any(marker in mapping for marker in ("{#", "{PLOVER:", "{mode:", "{:"))
+    # Plover's brace syntax covers key combinations, macros, mode changes,
+    # attached symbols and spacing directives.  Chinese dictionary values are
+    # plain text, so treating any brace value as a Plover-owned translation
+    # keeps the complete symbol/control dictionary available in Chinese mode.
+    return mapping.startswith("=") or "{" in mapping
 
 
 class PloverControlClassifier:

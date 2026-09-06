@@ -33,7 +33,8 @@ def test_classifier_only_claims_commands_and_their_prefixes():
     assert c.is_control_or_prefix(("X-",))
     assert c.is_control_or_prefix(("X-", "D-"))
     assert not c.is_control_or_prefix(("X-", "A-"))
-    assert not c.is_control_or_prefix(FakeStroke("A-"))
+    # Attached text is still a Plover translation and must remain available.
+    assert c.is_control_or_prefix(FakeStroke("A-"))
 
 
 def test_hook_consumes_and_restores_instance_method():

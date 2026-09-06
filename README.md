@@ -17,6 +17,16 @@
 
 在 Plover 的插件设置中启用 `yawei-rime` 后，扩展会在当前 engine 实例上安装一个可撤销的兼容钩子。它不会覆盖或改写 `Plover 4.0.3` 的安装文件；停用扩展后会恢复原始流程。没有配置中文后端时扩展是透明的，所有 stroke 都回退到 Plover。
 
+### 运行测试
+
+测试必须使用 Plover 自带的 Python 环境，因为 machine 和插件依赖 Plover 的运行时包：
+
+```text
+"C:\\Program Files\\Open Steno Project\\Plover 4.0.3\\data\\python.exe" -m pytest tests -q
+```
+
+测试不需要连接亚伟硬件；HID 报告和 Rime 通信均有模拟覆盖。真实设备仍建议在发布前做一次人工冒烟测试。
+
 路由优先级如下：
 
 ```text

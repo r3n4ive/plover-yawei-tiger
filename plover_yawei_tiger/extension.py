@@ -95,7 +95,7 @@ class YaweiRimeExtension:
         candidate = self._control_outline + [stroke.rtfcre]
         if self._classifier.is_control_or_prefix(candidate):
             self._control_outline = candidate
-            if candidate in self._classifier.control_outlines:
+            if tuple(candidate) in self._classifier.control_outlines:
                 self._control_outline = []
             return PreTranslateResult.PASS
         self._control_outline = []
