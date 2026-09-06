@@ -20,8 +20,9 @@ class CandidateController:
         self.output = output
         self.window = window
         self.state = CandidateState()
+        self.ui_bridge = None
 
-    def update(self, state: Optional[CandidateState]):
+    def _apply_state(self, state: Optional[CandidateState]):
         self.state = state or CandidateState()
         if self.state.committed:
             self.output(self.state.committed)
@@ -32,6 +33,12 @@ class CandidateController:
             else:
                 self.window.hide()
         return self.state
+
+    def update(self, state: Optional[CandidateState]):
+        if self.ui_bridge is not None and QThread.currentThread() is not self.ui_bridge.thread():
+            self.ui_bridge.state_received.emit(state or CandidateState())
+            return state or CandidateState()
+        return self._apply_state(state)
 
     def _backend_command(self, name, value=None):
         command = getattr(self.backend, "command", None)
@@ -86,11 +93,42 @@ class CandidateController:
 
 
 try:  # pragma: no cover - import availability depends on the host runtime
-    from PyQt5.QtCore import Qt
+    from PyQt5.QtCore import QObject, QThread, Qt, pyqtSignal, pyqtSlot
     from PyQt5.QtGui import QFont
     from PyQt5.QtWidgets import QLabel, QListWidget, QDialog, QVBoxLayout
 except ImportError:  # pragma: no cover
-    Qt = QFont = QLabel = QListWidget = QDialog = QVBoxLayout = None
+    QObject = QThread = pyqtSignal = pyqtSlot = Qt = QFont = QLabel = QListWidget = QDialog = QVBoxLayout = None
+
+
+if QObject is not None:
+    class CandidateUiBridge(QObject):
+        create_window = pyqtSignal()
+        close_window = pyqtSignal()
+        state_received = pyqtSignal(object)
+
+        def __init__(self, controller, app):
+            super().__init__()
+            self.controller = controller
+            self.moveToThread(app.thread())
+            self.create_window.connect(self._create, Qt.QueuedConnection)
+            self.close_window.connect(self._close, Qt.QueuedConnection)
+            self.state_received.connect(self._state, Qt.QueuedConnection)
+
+        @pyqtSlot()
+        def _create(self):
+            if self.controller.window is None:
+                self.controller.window = CandidateWindow(self.controller)
+
+        @pyqtSlot(object)
+        def _state(self, state):
+            self.controller._apply_state(state)
+
+        @pyqtSlot()
+        def _close(self):
+            if self.controller.window is not None:
+                self.controller.window.hide()
+                self.controller.window.deleteLater()
+                self.controller.window = None
 
 
 if QDialog is not None:

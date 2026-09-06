@@ -161,7 +161,7 @@ class YaweiRimeExtension:
             return self._candidate_controller
         try:
             from PyQt5.QtWidgets import QApplication
-            from .candidate import CandidateController, CandidateWindow
+            from .candidate import CandidateController, CandidateUiBridge
         except ImportError:
             return None
         if QApplication.instance() is None:
@@ -170,7 +170,8 @@ class YaweiRimeExtension:
         if output is None:
             return None
         controller = CandidateController(self.backend, output)
-        controller.window = CandidateWindow(controller)
+        controller.ui_bridge = CandidateUiBridge(controller, QApplication.instance())
+        controller.ui_bridge.create_window.emit()
         self.set_candidate_controller(controller)
         return controller
 
@@ -210,8 +211,9 @@ class YaweiRimeExtension:
             self._unregister()
             self._unregister = None
         self.engine.hook_disconnect("dictionaries_loaded", self._dictionaries_loaded)
-        if self._candidate_controller is not None and self._candidate_controller.window is not None:
-            self._candidate_controller.window.hide()
+        if self._candidate_controller is not None and self._candidate_controller.ui_bridge is not None:
+            self._candidate_controller.ui_bridge.close_window.emit()
+        self._candidate_controller = None
         self.backend.close()
         if not self._backend_explicit:
             self.backend = Backend()
@@ -238,11 +240,10 @@ class YaweiRimeExtension:
         backend_active = not isinstance(self.backend, Backend) or self._backend_explicit
         if backend_active and self._mode_on_stroke and stroke.rtfcre == self._mode_on_stroke:
             self.set_chinese_mode(True)
-            # Let Plover's existing mode/spacing dictionary entry translate too.
-            return PreTranslateResult.PASS
+            return PreTranslateResult.CONSUMED
         if backend_active and self._mode_off_stroke and stroke.rtfcre == self._mode_off_stroke:
             self.set_chinese_mode(False)
-            return PreTranslateResult.PASS
+            return PreTranslateResult.CONSUMED
         if self._mode_stroke and stroke.rtfcre == self._mode_stroke:
             self._chinese_mode = not self._chinese_mode
             return PreTranslateResult.CONSUMED

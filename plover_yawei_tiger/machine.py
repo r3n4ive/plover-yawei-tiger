@@ -113,6 +113,8 @@ class YaweiV3(ThreadedStenotypeBase):
         self._device = None
         if device is not None:
             try:
+                # hidapi reads can block until timeout; close before joining
+                # the worker so Plover's quit path is not held by the device.
                 device.close()
             except (IOError, OSError):
                 pass

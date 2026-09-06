@@ -154,9 +154,9 @@ def test_separate_mode_strokes_route_only_when_backend_is_active():
     extension.set_mode_strokes("IUNE-IU", "IU-IUNE")
     assert extension._before_translate(stroke("IUNE-IU")).value == "pass"
     extension.set_backend(RecordingBackend())
-    assert extension._before_translate(stroke("IUNE-IU")).value == "pass"
+    assert extension._before_translate(stroke("IUNE-IU")).value == "consumed"
     assert extension.chinese_mode is True
-    assert extension._before_translate(stroke("IU-IUNE")).value == "pass"
+    assert extension._before_translate(stroke("IU-IUNE")).value == "consumed"
     assert extension.chinese_mode is False
 
 
