@@ -30,6 +30,26 @@ class YaweiRimeEncoder:
     def __call__(self, stroke: str) -> str:
         return self.pinyin_map.get(stroke.upper(), self.auxiliary_map.get(stroke.upper(), ""))
 
+    def encode_stroke(self, stroke: str) -> str:
+        """Encode one chord containing a pinyin part and optional aux part."""
+        canonical = stroke.upper()
+        direct = self(canonical)
+        if direct:
+            return direct
+        if "-" not in canonical:
+            return ""
+        left, right = canonical.split("-", 1)
+        if left and left == right:
+            return self(left)
+        parts = []
+        for part in (left, right):
+            if not part:
+                continue
+            token = self.auxiliary_map.get(part, self.pinyin_map.get(part, ""))
+            if token:
+                parts.append(token)
+        return "".join(parts)
+
     def encode_outline(self, strokes: Iterable[str]) -> str:
-        tokens = [token for stroke in strokes if (token := self(stroke))]
+        tokens = [token for stroke in strokes if (token := self.encode_stroke(stroke))]
         return " ".join(tokens)

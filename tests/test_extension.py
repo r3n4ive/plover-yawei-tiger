@@ -88,6 +88,41 @@ def test_mode_stroke_is_consumed_and_toggles_mode():
     assert extension.chinese_mode is False
 
 
+def test_candidate_command_stroke_is_consumed_only_in_chinese_mode():
+    class CommandController:
+        def __init__(self):
+            self.calls = []
+
+        def update(self, state):
+            pass
+
+        def _backend_command(self, name, value=None):
+            self.calls.append((name, value))
+
+    engine = FakeEngine({})
+    extension = YaweiRimeExtension(engine)
+    controller = CommandController()
+    extension.set_candidate_controller(controller)
+    extension.set_command_stroke("-A", "select", 0)
+
+    assert extension._before_translate(stroke("-A")).value == "pass"
+    extension.set_chinese_mode(True)
+    assert extension._before_translate(stroke("-A")).value == "consumed"
+    assert controller.calls == [("select", 0)]
+
+
+def test_separate_mode_strokes_route_only_when_backend_is_active():
+    engine = FakeEngine({})
+    extension = YaweiRimeExtension(engine)
+    extension.set_mode_strokes("IUNE-IU", "IU-IUNE")
+    assert extension._before_translate(stroke("IUNE-IU")).value == "pass"
+    extension.set_backend(RecordingBackend())
+    assert extension._before_translate(stroke("IUNE-IU")).value == "pass"
+    assert extension.chinese_mode is True
+    assert extension._before_translate(stroke("IU-IUNE")).value == "pass"
+    assert extension.chinese_mode is False
+
+
 def test_extension_start_refreshes_and_stop_closes_backend():
     engine = FakeEngine({("W-W",): "{#Control(z)}"})
     engine._on_stroked = lambda keys: None
@@ -100,3 +135,40 @@ def test_extension_start_refreshes_and_stop_closes_backend():
     extension.stop()
     assert backend.closed is True
     assert not hasattr(engine, "_yawei_pre_translate_callbacks")
+
+
+def test_replacing_backend_updates_candidate_controller():
+    engine = FakeEngine({})
+    extension = YaweiRimeExtension(engine)
+    controller = type("Controller", (), {"backend": None, "update": lambda self, state: None})()
+    extension.set_candidate_controller(controller)
+    backend = RecordingBackend()
+    extension.set_backend(backend)
+    assert controller.backend is backend
+
+
+def test_default_backend_can_be_reconfigured_after_stop(monkeypatch):
+    class AutoBackend(Backend):
+        def __init__(self):
+            self.closed = False
+
+        def close(self):
+            self.closed = True
+
+    created = []
+
+    def factory():
+        backend = AutoBackend()
+        created.append(backend)
+        return backend
+
+    monkeypatch.setattr("plover_yawei_tiger.extension.create_rime_backend_from_environment", factory)
+    monkeypatch.setenv("PLOVER_YAWEI_RIME_ENABLE", "1")
+    engine = FakeEngine({})
+    engine._on_stroked = lambda keys: None
+    extension = YaweiRimeExtension(engine)
+    extension.start()
+    extension.stop()
+    extension.start()
+    assert len(created) == 2
+    extension.stop()

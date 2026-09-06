@@ -31,6 +31,12 @@ class SidecarBackend:
         )
         self._lock = threading.RLock()
         self.state = CandidateState()
+        self._state_listener = None
+
+    def set_state_listener(self, listener):
+        """Subscribe to state changes, including committed text events."""
+
+        self._state_listener = listener
 
     def _request(self, message: str) -> CandidateState:
         with self._lock:
@@ -44,6 +50,8 @@ class SidecarBackend:
             if not line:
                 raise RuntimeError("Rime sidecar returned no response")
             self.state = parse_response(line)
+            if self._state_listener is not None:
+                self._state_listener(self.state)
             return self.state
 
     def consume(self, stroke, engine) -> bool:
@@ -51,7 +59,7 @@ class SidecarBackend:
         # A backend that returns a committed string is responsible for sending
         # it through Plover's output object.  Candidate UI integration will add
         # that policy; for now a live sidecar consumes the stroke.
-        if self.state.committed:
+        if self.state.committed and self._state_listener is None:
             engine._send_string(self.state.committed)
         return True
 

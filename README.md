@@ -17,6 +17,16 @@
 
 在 Plover 的插件设置中启用 `yawei-rime` 后，扩展会在当前 engine 实例上安装一个可撤销的兼容钩子。它不会覆盖或改写 `Plover 4.0.3` 的安装文件；停用扩展后会恢复原始流程。没有配置中文后端时扩展是透明的，所有 stroke 都回退到 Plover。
 
+要启用直接连接小狼毫 `rime.dll` 的候选后端，设置环境变量
+`PLOVER_YAWEI_RIME_ENABLE=1` 后重启 Plover。扩展会自动查找
+`%ProgramFiles%\Rime\weasel-*\rime.dll` 和 `%APPDATA%\Rime`；也可以用
+`PLOVER_YAWEI_RIME_DLL`、`PLOVER_YAWEI_RIME_USER_DIR`、
+`PLOVER_YAWEI_RIME_SCHEMA` 覆盖默认路径和 schema。找不到 DLL、用户目录或映射文件时，扩展会记录日志并保持 Plover 原有行为。
+
+候选控制可由插件配置绑定到亚伟 chord。例如在扩展初始化代码中调用
+`set_command_stroke("-A", "select", 0)`、`set_command_stroke("-O", "page_next")`
+和 `set_command_stroke("-E", "commit")`。候选窗口中的数字 1-9、Enter、Escape、方向键和翻页键也会调用同一套 backend 命令；这些绑定只在中文模式生效。
+
 ### 运行测试
 
 测试必须使用 Plover 自带的 Python 环境，因为 machine 和插件依赖 Plover 的运行时包：
@@ -35,7 +45,7 @@
 中文模式下的普通编码 stroke       -> Rime 后端
 ```
 
-这意味着 Abby 左手修饰键字典、Ctrl/Alt/Shift/Win 组合键、上下左右、Home/End、功能键、宏和英文自动空格不需要迁移到 Rime。后端接口、JSON-lines sidecar 协议和 Windows `librime` ctypes 绑定已放在 `plover_yawei_tiger/sidecar.py`、`plover_yawei_tiger/rime_protocol.py` 与 `plover_yawei_tiger/rime_backend.py`。当前绑定可以独立启动小狼毫的 `rime.dll`、创建指定 schema 的 session、读取候选并提交；候选窗口和亚伟 stroke 到混合编码的最终规则仍在开发中。
+这意味着 Abby 左手修饰键字典、Ctrl/Alt/Shift/Win 组合键、上下左右、Home/End、功能键、宏和英文自动空格不需要迁移到 Rime。后端接口、JSON-lines sidecar 协议和 Windows `librime` ctypes 绑定已放在 `plover_yawei_tiger/sidecar.py`、`plover_yawei_tiger/rime_protocol.py` 与 `plover_yawei_tiger/rime_backend.py`。当前绑定可以独立启动小狼毫的 `rime.dll`、创建指定 schema 的 session、读取候选并提交；候选控制器、Qt 候选窗口和亚伟 stroke 到混合编码的可重复转换工具也已经加入，最终配置向导和专用控制 chord 仍在开发中。
 
 ### 开发者安装
 
@@ -81,7 +91,7 @@ Plover 记法中：
 
 ### 空格和分词
 
-英文可以使用 Plover 默认的按词空格。中文连续输入时，使用词典中的 `IUNE-IU` 关闭自动空格；切回英文时使用 `IU-IUNE` 恢复空格。中文词库本身以词和短语为单位组织，配合辅码后不需要在每个汉字之间手动敲空格。
+英文可以使用 Plover 默认的按词空格。启用 Rime 后，`IUNE-IU` 默认进入中文路由，`IU-IUNE` 默认回到英文路由；这两个 chord 同时保留原有的 Plover 空格模式命令。未启用 Rime 时，扩展不会拦截它们。中文词库本身以词和短语为单位组织，配合辅码后不需要在每个汉字之间手动敲空格。也可以调用 `set_mode_strokes()` 换成自己的切换键。
 
 ## 为什么要重做
 

@@ -26,3 +26,17 @@ def test_rime_backend_maps_strokes_and_emits_commit():
     assert backend.consume(type("Stroke", (), {"rtfcre": "UNKNOWN"})(), engine) is False
     backend.close()
     assert library.closed is True
+
+
+def test_rime_backend_listener_owns_commit_output():
+    library = FakeLibrary()
+    backend = RimeBackend(library, lambda stroke: "ni")
+    states = []
+    sent = []
+    backend.set_state_listener(states.append)
+    engine = type("Engine", (), {"_send_string": lambda self, text: sent.append(text)})()
+
+    assert backend.consume(type("Stroke", (), {"rtfcre": "AO"})(), engine) is True
+    assert len(states) == 1
+    assert states[0].committed == "结果"
+    assert sent == []

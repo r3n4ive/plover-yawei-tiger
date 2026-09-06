@@ -14,3 +14,10 @@ def test_auxiliary_map_is_used_for_unknown_strokes():
     assert encoder("GINEO") == "j"
     assert encoder("UNKNOWN") == ""
 
+
+def test_encode_stroke_combines_pinyin_and_auxiliary_halves():
+    encoder = YaweiRimeEncoder({"AO": "ao"}, {"GINEO": "j"})
+    assert YaweiRimeEncoder({"A": "a"}).encode_stroke("A-A") == "a"
+    assert encoder.encode_stroke("AO-GINEO") == "aoj"
+    assert encoder.encode_stroke("AO-") == "ao"
+    assert encoder.encode_outline(["AO-GINEO", "AO"]) == "aoj ao"

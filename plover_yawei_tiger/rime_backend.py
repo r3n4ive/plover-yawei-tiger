@@ -192,6 +192,9 @@ class RimeLibrary:
         if not self._dll.RimeSimulateKeySequence(self._session, text.encode("utf-8")):
             raise RuntimeError("librime rejected input")
         state = self.context()
+        return self._add_commit(state)
+
+    def _add_commit(self, state: CandidateState) -> CandidateState:
         commit = _Commit()
         commit.data_size = ctypes.sizeof(_Commit) - ctypes.sizeof(ctypes.c_int)
         if self._dll.RimeGetCommit(self._session, ctypes.byref(commit)):
@@ -202,7 +205,7 @@ class RimeLibrary:
     def select(self, index: int) -> CandidateState:
         if not self._dll.RimeSelectCandidateOnCurrentPage(self._session, int(index)):
             raise RuntimeError("librime candidate selection failed")
-        return self.context()
+        return self._add_commit(self.context())
 
     def page(self, backward: bool = False) -> CandidateState:
         change_page = getattr(self._dll, "RimeChangePage", None)
@@ -231,28 +234,38 @@ class RimeBackend:
         self.library = library
         self.stroke_to_input = stroke_to_input
         self.state = CandidateState()
+        self._state_listener = None
+
+    def set_state_listener(self, listener):
+        self._state_listener = listener
+
+    def _set_state(self, state):
+        self.state = state
+        if self._state_listener is not None:
+            self._state_listener(state)
+        return state
 
     def consume(self, stroke, engine) -> bool:
         token = self.stroke_to_input(stroke.rtfcre)
         if not token:
             return False
-        self.state = self.library.input(token)
-        if self.state.committed:
+        self._set_state(self.library.input(token))
+        if self.state.committed and self._state_listener is None:
             engine._send_string(self.state.committed)
         return True
 
     def command(self, name, value=None):
         if name == "commit":
-            self.state = self.library.input(" ")
+            self._set_state(self.library.input(" "))
         elif name == "cancel":
             self.library.clear()
-            self.state = self.library.context()
+            self._set_state(self.library.context())
         elif name == "page_next":
-            self.state = self.library.page(False)
+            self._set_state(self.library.page(False))
         elif name == "page_prev":
-            self.state = self.library.page(True)
+            self._set_state(self.library.page(True))
         elif name == "select":
-            self.state = self.library.select(int(value))
+            self._set_state(self.library.select(int(value)))
         else:
             raise ValueError("unknown Rime command: %s" % name)
         return self.state
