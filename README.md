@@ -17,11 +17,14 @@
 
 在 Plover 的插件设置中启用 `yawei-rime` 后，扩展会在当前 engine 实例上安装一个可撤销的兼容钩子。它不会覆盖或改写 `Plover 4.0.3` 的安装文件；停用扩展后会恢复原始流程。没有配置中文后端时扩展是透明的，所有 stroke 都回退到 Plover。
 
-要启用直接连接小狼毫 `rime.dll` 的候选后端，设置环境变量
-`PLOVER_YAWEI_RIME_ENABLE=1` 后重启 Plover。扩展会自动查找
-`%ProgramFiles%\Rime\weasel-*\rime.dll` 和 `%APPDATA%\Rime`；也可以用
-`PLOVER_YAWEI_RIME_DLL`、`PLOVER_YAWEI_RIME_USER_DIR`、
-`PLOVER_YAWEI_RIME_SCHEMA` 覆盖默认路径和 schema。找不到 DLL、用户目录或映射文件时，扩展会记录日志并保持 Plover 原有行为。
+要启用 Rime 候选后端，设置环境变量 `PLOVER_YAWEI_RIME_ENABLE=1` 后重启
+Plover。首次启用时，插件会从 librime 官方发布页下载并校验固定版本
+`1.17.0`（Windows MSVC x64），缓存到 `%LOCALAPPDATA%\Plover\yawei-rime`。
+项目自带的 schema 和词典会安装到同一目录下的隔离 Rime 数据目录，不读取或修改
+小狼毫的 `%APPDATA%\Rime`。也可以用 `PLOVER_YAWEI_RIME_ROOT` 指定缓存位置，
+或用 `PLOVER_YAWEI_RIME_DLL` 指定开发用 DLL；`PLOVER_YAWEI_RIME_USER_DIR` 和
+`PLOVER_YAWEI_RIME_SCHEMA` 可覆盖用户目录和 schema。下载、校验或初始化失败时，
+扩展会记录日志并保持 Plover 原有行为。
 
 候选控制可由插件配置绑定到亚伟 chord。例如在扩展初始化代码中调用
 `set_command_stroke("-A", "select", 0)`、`set_command_stroke("-O", "page_next")`
@@ -45,7 +48,7 @@
 中文模式下的普通编码 stroke       -> Rime 后端
 ```
 
-这意味着 Abby 左手修饰键字典、Ctrl/Alt/Shift/Win 组合键、上下左右、Home/End、功能键、宏和英文自动空格不需要迁移到 Rime。后端接口、JSON-lines sidecar 协议和 Windows `librime` ctypes 绑定已放在 `plover_yawei_tiger/sidecar.py`、`plover_yawei_tiger/rime_protocol.py` 与 `plover_yawei_tiger/rime_backend.py`。当前绑定可以独立启动小狼毫的 `rime.dll`、创建指定 schema 的 session、读取候选并提交；候选控制器、Qt 候选窗口和亚伟 stroke 到混合编码的可重复转换工具也已经加入，最终配置向导和专用控制 chord 仍在开发中。
+这意味着 Abby 左手修饰键字典、Ctrl/Alt/Shift/Win 组合键、上下左右、Home/End、功能键、宏和英文自动空格不需要迁移到 Rime。后端接口、JSON-lines sidecar 协议、固定版本 librime 运行时和 Windows ctypes 绑定已放在 `plover_yawei_tiger/` 下；候选控制器、Qt 候选窗口和亚伟 stroke 到混合编码的可重复转换工具也已经加入。
 
 ### 开发者安装
 

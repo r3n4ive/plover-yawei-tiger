@@ -1,3 +1,4 @@
 recursive-include plover_yawei_tiger/dictionaries *.json
 recursive-include plover_yawei_tiger/theory_map *.txt
+recursive-include plover_yawei_tiger/rime_data *.yaml
 prune tools

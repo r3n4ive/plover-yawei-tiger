@@ -18,6 +18,7 @@ from .routing import (
     PreTranslateResult,
     install_pre_translate_hook,
 )
+from .librime_runtime import ensure_librime, ensure_rime_data
 from .rime_backend import RimeBackend, RimeLibrary
 from .stroke_mapping import YaweiRimeEncoder, load_map
 
@@ -43,23 +44,20 @@ def create_rime_backend_from_environment():
         "1", "true", "yes", "on"
     }:
         return None
-    program_files = os.environ.get("ProgramFiles", r"C:\Program Files")
-    dll_candidates = []
-    if os.environ.get("PLOVER_YAWEI_RIME_DLL"):
-        dll_candidates.append(os.environ["PLOVER_YAWEI_RIME_DLL"])
-    dll_candidates.extend(
-        sorted(Path(program_files, "Rime").glob("weasel-*/rime.dll"), reverse=True)
-    )
-    dll_path = _first_existing(dll_candidates)
-    if dll_path is None:
-        return None
-
-    user_dir = os.environ.get("PLOVER_YAWEI_RIME_USER_DIR")
-    if not user_dir:
-        appdata = os.environ.get("APPDATA")
-        user_dir = str(Path(appdata, "Rime")) if appdata else ""
-    if not user_dir or not Path(user_dir).is_dir():
-        return None
+    # An explicit DLL remains useful for development and downstream packagers;
+    # normal users get the pinned, verified runtime managed by this project.
+    dll_path = os.environ.get("PLOVER_YAWEI_RIME_DLL")
+    if dll_path:
+        dll_path = Path(dll_path)
+        runtime_root = Path(os.environ.get("PLOVER_YAWEI_RIME_ROOT", dll_path.parent))
+        data_root = runtime_root
+    else:
+        runtime = ensure_librime()
+        dll_path = runtime.dll_path
+        runtime_root = runtime.root
+        data_root = runtime_root.parent.parent
+    shared_dir, default_user_dir = ensure_rime_data(data_root)
+    user_dir = os.environ.get("PLOVER_YAWEI_RIME_USER_DIR", str(default_user_dir))
 
     package_root = Path(__file__).resolve().parent
     root = package_root.parent
@@ -80,8 +78,8 @@ def create_rime_backend_from_environment():
     if not Path(pinyin_map).is_file() or not Path(auxiliary_map).is_file():
         return None
     encoder = YaweiRimeEncoder(load_map(pinyin_map), load_map(auxiliary_map))
-    schema = os.environ.get("PLOVER_YAWEI_RIME_SCHEMA", "tigress")
-    library = RimeLibrary(str(dll_path), user_dir, schema_id=schema)
+    schema = os.environ.get("PLOVER_YAWEI_RIME_SCHEMA", "yawei_tiger")
+    library = RimeLibrary(str(dll_path), user_dir, shared_dir=str(shared_dir), schema_id=schema)
     return RimeBackend(library, encoder.encode_stroke)
 
 

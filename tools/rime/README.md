@@ -15,8 +15,9 @@ python tools/rime/build_dictionary.py `
   plover_yawei_tiger/dictionaries/yw-pinyin.json
 ```
 
-The generated file is a Rime table dictionary. Copy it and
-`yawei_tiger.schema.yaml` into the Rime user directory, deploy Rime, and use
-schema id `yawei_tiger` for bridge experiments. The final plugin will generate
-and install this data automatically; this tool is deliberately kept as a
-repeatable, inspectable build step while the stroke protocol is stabilized.
+The generated file is a Rime table dictionary. The plugin release includes a
+generated copy and installs it into its own isolated Rime data directory; it
+does not read or modify Weasel's user directory. The plugin downloads a pinned
+official librime Windows runtime on first enable and keeps it under the same
+private root. This tool remains useful when the dictionary sources or mapping
+rules change.
