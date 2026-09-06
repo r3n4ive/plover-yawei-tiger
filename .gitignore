@@ -6,3 +6,6 @@ dist/
 build/
 *.whl
 plover-yawei-tiger-*/
+build-test/
+rime-check/
+rime-check.7z

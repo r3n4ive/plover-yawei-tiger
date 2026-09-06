@@ -32,7 +32,7 @@ def test_rime_factory_discovers_weasel_and_maps(tmp_path, monkeypatch):
             created.update(dll=dll_path, user=user_dir, schema=kwargs["schema_id"], shared=kwargs["shared_dir"])
 
     monkeypatch.setattr(extension_module, "RimeLibrary", FakeLibrary)
-    monkeypatch.setattr(extension_module, "ensure_rime_data", lambda root: (shared_dir, user_dir))
+    monkeypatch.setattr(extension_module, "ensure_rime_data", lambda root, **kwargs: (shared_dir, user_dir))
     backend = extension_module.create_rime_backend_from_environment()
     assert backend is not None
     assert Path(created["dll"]) == dll

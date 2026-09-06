@@ -28,9 +28,10 @@ LIBRIME_URL = (
 
 
 class RimeRuntime:
-    def __init__(self, dll_path: Path, root: Path):
+    def __init__(self, dll_path: Path, root: Path, deployer_path: Optional[Path] = None):
         self.dll_path = Path(dll_path)
         self.root = Path(root)
+        self.deployer_path = Path(deployer_path) if deployer_path else None
 
 
 def default_root() -> Path:
@@ -57,15 +58,28 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def _data_fingerprint(*paths: Path) -> str:
+    """Fingerprint the packaged inputs so a changed schema/dictionary rebuilds."""
+
+    digest = hashlib.sha256()
+    for path in paths:
+        digest.update(path.name.encode("utf-8"))
+        with path.open("rb") as stream:
+            for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+                digest.update(chunk)
+    return digest.hexdigest()
+
+
 def ensure_librime(root: Optional[Path] = None) -> RimeRuntime:
     """Return the pinned DLL, downloading and verifying it if necessary."""
 
     root = Path(root or default_root())
     version_root = root / "runtime" / ("librime-" + LIBRIME_VERSION)
     dll_path = version_root / "rime.dll"
+    deployer_path = version_root / "rime_deployer.exe"
     marker = version_root / ".complete"
-    if dll_path.is_file() and marker.is_file():
-        return RimeRuntime(dll_path, version_root)
+    if dll_path.is_file() and deployer_path.is_file() and marker.is_file():
+        return RimeRuntime(dll_path, version_root, deployer_path)
 
     version_root.parent.mkdir(parents=True, exist_ok=True)
     archive = root / "downloads" / LIBRIME_ASSET
@@ -83,17 +97,19 @@ def ensure_librime(root: Optional[Path] = None) -> RimeRuntime:
             raise RuntimeError("Windows tar.exe is required to install librime")
         subprocess.run([tar, "-xf", str(archive), "-C", str(staging)], check=True)
         extracted = staging / "dist" / "lib" / "rime.dll"
-        if not extracted.is_file():
-            raise RuntimeError("librime archive does not contain dist/lib/rime.dll")
+        extracted_deployer = staging / "dist" / "bin" / "rime_deployer.exe"
+        if not extracted.is_file() or not extracted_deployer.is_file():
+            raise RuntimeError("librime archive does not contain the runtime DLL and deployer")
         version_root.mkdir(parents=True, exist_ok=True)
         shutil.copy2(extracted, dll_path)
+        shutil.copy2(extracted_deployer, deployer_path)
         marker.write_text(LIBRIME_SHA256 + "\n", encoding="ascii")
     finally:
         shutil.rmtree(staging, ignore_errors=True)
-    return RimeRuntime(dll_path, version_root)
+    return RimeRuntime(dll_path, version_root, deployer_path)
 
 
-def ensure_rime_data(root: Optional[Path] = None):
+def ensure_rime_data(root: Optional[Path] = None, deployer: Optional[Path] = None):
     """Create the isolated shared/user Rime directories and seed project data."""
 
     package_root = Path(__file__).resolve().parent / "rime_data"
@@ -102,11 +118,26 @@ def ensure_rime_data(root: Optional[Path] = None):
     user = data_root / "user"
     shared.mkdir(parents=True, exist_ok=True)
     user.mkdir(parents=True, exist_ok=True)
+    sources = []
     for name in ("yawei_tiger.schema.yaml", "yawei_tiger.dict.yaml"):
         source = package_root / name
         target = shared / name
         if not source.is_file():
             raise RuntimeError("packaged Rime data is missing: %s" % name)
-        if not target.is_file() or target.stat().st_size != source.stat().st_size:
+        if not target.is_file() or _sha256(target) != _sha256(source):
             shutil.copy2(source, target)
+        sources.append(target)
+    if deployer is not None:
+        marker = shared / ".yawei_tiger_compiled"
+        schema = shared / "yawei_tiger.schema.yaml"
+        build = shared / "build"
+        generated = build / "yawei_tiger.table.bin"
+        fingerprint = _data_fingerprint(*sources)
+        if not marker.is_file() or marker.read_text(encoding="ascii").strip() != fingerprint or not generated.is_file():
+            subprocess.run(
+                [str(deployer), "--compile", str(schema), str(user), str(shared), str(build)],
+                check=True,
+                cwd=str(shared),
+            )
+            marker.write_text(fingerprint + "\n", encoding="ascii")
     return shared, user

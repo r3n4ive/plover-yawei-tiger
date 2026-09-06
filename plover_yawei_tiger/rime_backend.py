@@ -145,7 +145,9 @@ class RimeLibrary:
             "distribution_version": "0.1",
             "app_name": "rime.plover.yawei",
             "log_dir": "",
-            "prebuilt_data_dir": None,
+            "prebuilt_data_dir": str(Path(self.shared_dir) / "build")
+            if self.shared_dir and (Path(self.shared_dir) / "build").is_dir()
+            else None,
             "staging_dir": None,
         }
         for field, value in values.items():

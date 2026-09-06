@@ -56,7 +56,8 @@ def create_rime_backend_from_environment():
         dll_path = runtime.dll_path
         runtime_root = runtime.root
         data_root = runtime_root.parent.parent
-    shared_dir, default_user_dir = ensure_rime_data(data_root)
+    deployer = runtime.deployer_path if not os.environ.get("PLOVER_YAWEI_RIME_DLL") else None
+    shared_dir, default_user_dir = ensure_rime_data(data_root, deployer=deployer)
     user_dir = os.environ.get("PLOVER_YAWEI_RIME_USER_DIR", str(default_user_dir))
 
     package_root = Path(__file__).resolve().parent
