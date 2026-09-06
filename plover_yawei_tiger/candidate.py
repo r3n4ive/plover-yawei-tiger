@@ -101,9 +101,9 @@ if QDialog is not None:
             super().__init__()
             self.controller = controller
             self.setWindowTitle("Plover candidates")
-            self.setWindowFlags(Qt.Tool | Qt.WindowStaysOnTopHint)
+            self.setWindowFlags(Qt.Tool | Qt.WindowStaysOnTopHint | Qt.FramelessWindowHint)
             self.setModal(False)
-            self.setAttribute(Qt.WA_ShowWithoutActivating, True)
+            self.setFocusPolicy(Qt.StrongFocus)
             self._preedit = QLabel(self)
             self._preedit.setFont(QFont("Segoe UI", 10))
             self._list = QListWidget(self)
@@ -126,6 +126,8 @@ if QDialog is not None:
         def show_candidate_window(self):
             self.show()
             self.raise_()
+            self.activateWindow()
+            self.setFocus(Qt.OtherFocusReason)
 
         def keyPressEvent(self, event):
             key = event.key()

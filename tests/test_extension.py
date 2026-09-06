@@ -111,6 +111,43 @@ def test_candidate_command_stroke_is_consumed_only_in_chinese_mode():
     assert controller.calls == [("select", 0)]
 
 
+def test_chinese_backspace_prefers_rime_and_falls_back_one_character():
+    class EditingBackend(RecordingBackend):
+        def __init__(self, handled):
+            super().__init__()
+            self.handled = handled
+            self.commands = []
+            self.last_command_handled = handled
+
+        def command(self, name, value=None):
+            self.commands.append((name, value))
+            self.last_command_handled = self.handled
+            return None
+
+    class Engine(FakeEngine):
+        def __init__(self):
+            super().__init__({})
+            self.deleted = []
+
+        def _send_backspaces(self, count):
+            self.deleted.append(count)
+
+    engine = Engine()
+    backend = EditingBackend(False)
+    extension = YaweiRimeExtension(engine)
+    extension.set_backend(backend)
+    extension.set_chinese_mode(True)
+    assert extension._before_translate(stroke("SPW")).value == "consumed"
+    assert backend.commands == [("backspace", None)]
+    assert engine.deleted == [1]
+
+    backend = EditingBackend(True)
+    extension.set_backend(backend)
+    extension.set_chinese_mode(True)
+    extension._before_translate(stroke("SPW"))
+    assert engine.deleted == [1]
+
+
 def test_separate_mode_strokes_route_only_when_backend_is_active():
     engine = FakeEngine({})
     extension = YaweiRimeExtension(engine)

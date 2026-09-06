@@ -118,6 +118,12 @@ class YaweiRimeExtension:
         self._control_outline = []
         self._candidate_controller = None
         self._command_strokes = {}
+        # Abby's conventional editing strokes. In Chinese mode these must be
+        # handled by Rime first, otherwise Plover undoes the whole translation.
+        self._command_strokes.update({
+            "SPW": ("backspace", None),
+            "TKHR": ("delete", None),
+        })
         self._auto_backend_attempted = False
         self._backend_explicit = False
 
@@ -244,10 +250,24 @@ class YaweiRimeExtension:
             return PreTranslateResult.PASS
 
         command = self._command_strokes.get(stroke.rtfcre)
-        if command and self._candidate_controller is not None:
+        if command:
             name, value = command
             try:
-                self._candidate_controller._backend_command(name, value)
+                if name in {"backspace", "delete"}:
+                    state = self.backend.command(name, value)
+                    if not getattr(self.backend, "last_command_handled", True):
+                        if name == "backspace":
+                            send = getattr(self.engine, "_send_backspaces", None)
+                            if send is not None:
+                                send(1)
+                        else:
+                            send = getattr(self.engine, "_send_key_combination", None)
+                            if send is not None:
+                                send("DELETE")
+                elif self._candidate_controller is not None:
+                    self._candidate_controller._backend_command(name, value)
+                else:
+                    self.backend.command(name, value)
                 return PreTranslateResult.CONSUMED
             except Exception:
                 log.error("Yawei candidate command failed", exc_info=True)

@@ -15,6 +15,10 @@ from typing import Callable, Optional
 from .rime_protocol import CandidateState
 
 
+RIME_KEY_BACKSPACE = 0xFF08
+RIME_KEY_DELETE = 0xFFFF
+
+
 class _Traits(ctypes.Structure):
     _fields_ = [
         ("data_size", ctypes.c_int),
@@ -123,6 +127,8 @@ class RimeLibrary:
         d.RimeFreeCommit.restype = ctypes.c_int
         d.RimeClearComposition.argtypes = [ctypes.c_size_t]
         d.RimeClearComposition.restype = None
+        d.RimeProcessKey.argtypes = [ctypes.c_size_t, ctypes.c_int, ctypes.c_int]
+        d.RimeProcessKey.restype = ctypes.c_int
         d.RimeSelectCandidateOnCurrentPage.argtypes = [ctypes.c_size_t, ctypes.c_size_t]
         d.RimeSelectCandidateOnCurrentPage.restype = ctypes.c_int
         # ``RimeChangePage`` is part of newer builds' versioned API and is not
@@ -219,6 +225,20 @@ class RimeLibrary:
         if self._session:
             self._dll.RimeClearComposition(self._session)
 
+    def process_key(self, keycode: int):
+        """Process one editing key and report whether Rime consumed it."""
+
+        if not self._initialized:
+            self.start()
+        before = self.context()
+        handled = bool(self._dll.RimeProcessKey(self._session, keycode, 0))
+        state = self._add_commit(self.context())
+        # librime's editor may consume BackSpace while returning false when
+        # there is no processor result. Detect that case from the composition.
+        if keycode == RIME_KEY_BACKSPACE and len(state.preedit) < len(before.preedit):
+            handled = True
+        return handled, state
+
     def close(self):
         if self._session:
             self._dll.RimeDestroySession(self._session)
@@ -237,6 +257,7 @@ class RimeBackend:
         self.stroke_to_input = stroke_to_input
         self.state = CandidateState()
         self._state_listener = None
+        self.last_command_handled = True
 
     def set_state_listener(self, listener):
         self._state_listener = listener
@@ -268,6 +289,10 @@ class RimeBackend:
             self._set_state(self.library.page(True))
         elif name == "select":
             self._set_state(self.library.select(int(value)))
+        elif name in {"backspace", "delete"}:
+            keycode = RIME_KEY_BACKSPACE if name == "backspace" else RIME_KEY_DELETE
+            self.last_command_handled, state = self.library.process_key(keycode)
+            self._set_state(state)
         else:
             raise ValueError("unknown Rime command: %s" % name)
         return self.state

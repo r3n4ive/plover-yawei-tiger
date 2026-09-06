@@ -17,6 +17,11 @@
 
 在 Plover 的插件设置中启用 `yawei-rime` 后，扩展会在当前 engine 实例上安装一个可撤销的兼容钩子。它不会覆盖或改写 `Plover 4.0.3` 的安装文件；停用扩展后会恢复原始流程。没有配置中文后端时扩展是透明的，所有 stroke 都回退到 Plover。
 
+本地开发安装会直接注册为 Plover 的 `yawei-rime` extension、`Yawei V3`
+machine 和 `yawei-tiger` system。Plover Plugin Manager 的在线列表来自 PyPI
+和 Open Steno 插件注册表；未发布到 PyPI 并登记前，在线列表不会显示本项目，
+但不影响本地 entry point 被 Plover 加载。
+
 要启用 Rime 候选后端，设置环境变量 `PLOVER_YAWEI_RIME_ENABLE=1` 后重启
 Plover。首次启用时，插件会从 librime 官方发布页下载并校验固定版本
 `1.17.0`（Windows MSVC x64），缓存到 `%LOCALAPPDATA%\Plover\yawei-rime`。
@@ -26,7 +31,7 @@ Plover。首次启用时，插件会从 librime 官方发布页下载并校验�
 `PLOVER_YAWEI_RIME_SCHEMA` 可覆盖用户目录和 schema。下载、校验或初始化失败时，
 扩展会记录日志并保持 Plover 原有行为。
 
-候选控制可由插件配置绑定到亚伟 chord。例如在扩展初始化代码中调用
+候选窗口会在 Rime 返回 preedit 或候选时显示，并保持在前台。候选控制可由插件配置绑定到亚伟 chord。例如在扩展初始化代码中调用
 `set_command_stroke("-A", "select", 0)`、`set_command_stroke("-O", "page_next")`
 和 `set_command_stroke("-E", "commit")`。候选窗口中的数字 1-9、Enter、Escape、方向键和翻页键也会调用同一套 backend 命令；这些绑定只在中文模式生效。
 
