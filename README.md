@@ -6,6 +6,37 @@
 
 项目支持第三代亚伟 YW-V-3 硬件键盘。安装本项目和 `hidapi` 后，在 Plover 中将机器选择为 `Yawei V3`，即可直接读取亚伟键盘的 HID 报告；普通键盘模拟仍可选择 `Keyboard`。
 
+## 安装和运行时路由
+
+本项目正在把中文候选能力做成 Plover 插件，而不是要求用户修改 Plover 安装目录。安装开发包后，Plover 会注册以下组件：
+
+- `Yawei V3` machine：读取第三代亚伟 HID 键盘；
+- `yawei-tiger` system：当前拼音 + 虎码辅码键位系统；
+- `yawei-rime` extension：为中文后端提供翻译前路由；
+- 现有 Plover 字典：符号、宏、修饰键、方向键和英文仍由 Plover 处理。
+
+在 Plover 的插件设置中启用 `yawei-rime` 后，扩展会在当前 engine 实例上安装一个可撤销的兼容钩子。它不会覆盖或改写 `Plover 4.0.3` 的安装文件；停用扩展后会恢复原始流程。没有配置中文后端时扩展是透明的，所有 stroke 都回退到 Plover。
+
+路由优先级如下：
+
+```text
+控制/符号/宏字典（包括多笔画前缀） -> Plover
+英文和未接管的 stroke             -> Plover
+中文模式下的普通编码 stroke       -> Rime 后端
+```
+
+这意味着 Abby 左手修饰键字典、Ctrl/Alt/Shift/Win 组合键、上下左右、Home/End、功能键、宏和英文自动空格不需要迁移到 Rime。后端接口、JSON-lines sidecar 协议和 Windows `librime` ctypes 绑定已放在 `plover_yawei_tiger/sidecar.py`、`plover_yawei_tiger/rime_protocol.py` 与 `plover_yawei_tiger/rime_backend.py`。当前绑定可以独立启动小狼毫的 `rime.dll`、创建指定 schema 的 session、读取候选并提交；候选窗口和亚伟 stroke 到混合编码的最终规则仍在开发中。
+
+### 开发者安装
+
+在包含 Plover 的 Python 环境中执行：
+
+```text
+python -m pip install -e .
+```
+
+然后在 Plover 中选择 `Yawei V3`，启用 `yawei-rime` 扩展。当前扩展默认处于英文/透明模式；Rime 中文模式和候选框完成后会加入专用切换 chord 与候选操作键。
+
 ## 输入方式
 
 ### 拼音码
