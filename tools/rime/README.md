@@ -21,3 +21,14 @@ does not read or modify Weasel's user directory. The plugin downloads a pinned
 official librime Windows runtime on first enable and keeps it under the same
 private root. This tool remains useful when the dictionary sources or mapping
 rules change.
+
+For the normal project dictionary, run this from the repository root. It uses
+the same JSON files enabled by the Yawei system and writes the packaged YAML:
+
+```text
+python tools/rime/sync_dictionary.py
+```
+
+Use `--check` before committing to verify the checked-in YAML without changing
+it. Repeated `--source filename.json` options build a smaller custom set. The
+source remains Plover JSON; YAML is a generated Rime artifact.
