@@ -17,7 +17,12 @@ def test_auxiliary_map_is_used_for_unknown_strokes():
 
 def test_encode_stroke_combines_pinyin_and_auxiliary_halves():
     encoder = YaweiRimeEncoder({"AO": "ao"}, {"GINEO": "j"})
-    assert YaweiRimeEncoder({"A": "a"}).encode_stroke("A-A") == "a"
+    assert YaweiRimeEncoder({"A": "a"}).encode_stroke("A-A") == "a'a"
     assert encoder.encode_stroke("AO-GINEO") == "aoj"
     assert encoder.encode_stroke("AO-") == "ao"
     assert encoder.encode_outline(["AO-GINEO", "AO"]) == "aoj ao"
+
+
+def test_symmetric_yawei_chord_preserves_repeated_syllable():
+    encoder = YaweiRimeEncoder({"BA": "ba"})
+    assert encoder.encode_stroke("BA-BA") == "ba'ba"

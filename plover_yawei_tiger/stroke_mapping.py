@@ -40,7 +40,12 @@ class YaweiRimeEncoder:
             return ""
         left, right = canonical.split("-", 1)
         if left and left == right:
-            return self(left)
+            token = self(left)
+            # In Yawei, a symmetric chord such as ``BA-BA`` is the standard
+            # shorthand for a repeated syllable (the Plover dictionary maps
+            # it to ``爸爸``).  Keep both syllables when forwarding to Rime;
+            # the schema apostrophe is its explicit syllable delimiter.
+            return "%s'%s" % (token, token) if token else ""
         parts = []
         for part in (left, right):
             if not part:
