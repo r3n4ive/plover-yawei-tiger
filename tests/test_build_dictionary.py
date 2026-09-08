@@ -26,3 +26,19 @@ def test_sync_source_manifest_matches_enabled_system_dictionaries():
     from plover_yawei_tiger.system import DEFAULT_DICTIONARIES
 
     assert DEFAULT_SOURCES == DEFAULT_DICTIONARIES
+
+
+def test_conversion_distinguishes_pinyin_repeat_from_auxiliary_repeat(tmp_path):
+    source = tmp_path / "source.json"
+    source.write_text(json.dumps({
+        "BA-BA": "爸爸",
+        "A-XD/BDNEO-BDNEO": "阿勒",
+    }, ensure_ascii=False), encoding="utf-8")
+    encoder = YaweiRimeEncoder(
+        {"BA": "ba", "A": "a", "XD": "le"},
+        {"BDNEO": "t"},
+    )
+    rows = convert([source], encoder)
+    assert ("ba'ba", "爸爸") in rows
+    assert ("ale't", "阿勒") in rows
+    assert ("ale't't", "阿勒") not in rows

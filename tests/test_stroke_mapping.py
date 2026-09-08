@@ -26,3 +26,8 @@ def test_encode_stroke_combines_pinyin_and_auxiliary_halves():
 def test_symmetric_yawei_chord_preserves_repeated_syllable():
     encoder = YaweiRimeEncoder({"BA": "ba"})
     assert encoder.encode_stroke("BA-BA") == "ba'ba"
+
+
+def test_symmetric_auxiliary_chord_stays_one_shape_token():
+    encoder = YaweiRimeEncoder({}, {"BDNEO": "t"})
+    assert encoder.encode_stroke("BDNEO-BDNEO") == "t"
