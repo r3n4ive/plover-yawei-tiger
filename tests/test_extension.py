@@ -111,6 +111,66 @@ def test_candidate_command_stroke_is_consumed_only_in_chinese_mode():
     assert controller.calls == [("select", 0)]
 
 
+def test_standard_yawei_number_chords_select_candidates():
+    class CommandController:
+        def __init__(self):
+            self.calls = []
+            self.state = type("State", (), {
+                "candidates": ["一", "二", "三"],
+                "preedit": "ni",
+            })()
+
+        def update(self, state):
+            self.state = state
+
+        def _backend_command(self, name, value=None):
+            self.calls.append((name, value))
+
+    engine = FakeEngine({})
+    extension = YaweiRimeExtension(engine)
+    controller = CommandController()
+    extension.set_candidate_controller(controller)
+    extension.set_chinese_mode(True)
+
+    assert extension._before_translate(stroke("XN-D")).value == "consumed"
+    assert extension._before_translate(stroke("XN-G")).value == "consumed"
+    assert controller.calls == [("select", 0), ("select", 2)]
+
+
+def test_number_chord_falls_back_to_plover_without_candidates():
+    class CommandController:
+        state = type("State", (), {"candidates": [], "preedit": ""})()
+
+        def update(self, state):
+            self.state = state
+
+        def _backend_command(self, name, value=None):
+            raise AssertionError("must not route an empty candidate selection")
+
+    engine = FakeEngine({("XN-D",): "{^1^}"})
+    extension = YaweiRimeExtension(engine)
+    extension.set_candidate_controller(CommandController())
+    extension.set_chinese_mode(True)
+    assert extension._before_translate(stroke("XN-D")).value == "pass"
+
+
+def test_all_standard_number_chords_are_defaults():
+    extension = YaweiRimeExtension(FakeEngine({}))
+    assert extension._command_strokes == {
+        "SPW": ("backspace", None),
+        "TKHR": ("delete", None),
+        "XN-D": ("select", 0),
+        "XN-Z": ("select", 1),
+        "XN-G": ("select", 2),
+        "XN-W": ("select", 3),
+        "XN-I": ("select", 4),
+        "XN-U": ("select", 5),
+        "XN-N": ("select", 6),
+        "XN-E": ("select", 7),
+        "XN-A": ("select", 8),
+    }
+
+
 def test_chinese_backspace_prefers_rime_and_falls_back_one_character():
     class EditingBackend(RecordingBackend):
         def __init__(self, handled):

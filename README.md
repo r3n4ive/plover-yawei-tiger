@@ -31,9 +31,29 @@ Plover。首次启用时，插件会从 librime 官方发布页下载并校验�
 `PLOVER_YAWEI_RIME_SCHEMA` 可覆盖用户目录和 schema。下载、校验或初始化失败时，
 扩展会记录日志并保持 Plover 原有行为。
 
-候选窗口会在 Rime 返回 preedit 或候选时显示，并保持在前台。候选控制可由插件配置绑定到亚伟 chord。例如在扩展初始化代码中调用
-`set_command_stroke("-A", "select", 0)`、`set_command_stroke("-O", "page_next")`
-和 `set_command_stroke("-E", "commit")`。候选窗口中的数字 1-9、Enter、Escape、方向键和翻页键也会调用同一套 backend 命令；这些绑定只在中文模式生效。
+候选窗口会在 Rime 返回 preedit 或候选时显示，并保持在前台。候选选择直接复用
+`yw-gongneng.json` 已有的亚伟数字指法，不新增候选专用前缀：
+
+| 候选序号 | 亚伟 chord |
+|:---:|:---|
+| 1 | `XN-D` |
+| 2 | `XN-Z` |
+| 3 | `XN-G` |
+| 4 | `XN-W` |
+| 5 | `XN-I` |
+| 6 | `XN-U` |
+| 7 | `XN-N` |
+| 8 | `XN-E` |
+| 9 | `XN-A` |
+
+例如候选框显示“1. 你、2. 尼、3. 妮”时，按 `XN-D` 上屏“你”，按 `XN-Z`
+上屏“尼”，按 `XN-G` 上屏“妮”。这组指法只在中文模式且当前确实有对应候选时被插件消费；
+没有候选时会回到 Plover 原来的数字/符号翻译，因此不会改变亚伟基础指法。`XN-O`（数字 0）
+暂不作为候选键，因为当前 Rime 页大小为 9。候选窗口仍支持普通键盘的数字 1-9、Enter、Escape、
+方向键和翻页键；这些操作调用同一套 backend 命令。
+
+候选命令仍可由下游方案覆盖，例如调用 `set_command_stroke("某个空闲 chord", "select", 0)`。
+项目默认不预留新的亚伟编码空间，便于以后替换拼音、辅码或词库而不产生固定冲突。
 
 ### 运行测试
 
@@ -66,7 +86,8 @@ python -m pip install -e .
 然后在 Plover 中选择 `Yawei V3`，启用 `yawei-rime` 扩展。扩展默认处于英文/透明模式；设置
 `PLOVER_YAWEI_RIME_ENABLE=1` 后重启 Plover，即可启用隔离的 Rime 中文后端和候选框。
 `IUNE-IU` 进入中文模式，`IU-IUNE` 回到英文模式。中文候选可通过候选窗口的数字键、
-Enter、Escape、方向键和翻页键操作；Plover 原有英文、符号、宏和编辑能力继续保留。
+Enter、Escape、方向键和翻页键操作，也可以直接在亚伟键盘上按上表的 `XN-*` 数字 chord；
+Plover 原有英文、符号、宏和编辑能力继续保留。
 
 Plover JSON 是词库源文件，Rime YAML 是生成文件。修改 JSON 后，在仓库根目录运行：
 

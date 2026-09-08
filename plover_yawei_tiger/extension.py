@@ -106,6 +106,21 @@ class YaweiRimeExtension:
 
     NAME = "yawei-rime"
 
+    # These are the standard Yawei number chords already present in
+    # ``yw-gongneng.json``.  Reusing them keeps candidate selection within the
+    # machine's normal fingering instead of reserving a new control prefix.
+    DEFAULT_CANDIDATE_STROKES = {
+        "XN-D": ("select", 0),  # 1
+        "XN-Z": ("select", 1),  # 2
+        "XN-G": ("select", 2),  # 3
+        "XN-W": ("select", 3),  # 4
+        "XN-I": ("select", 4),  # 5
+        "XN-U": ("select", 5),  # 6
+        "XN-N": ("select", 6),  # 7
+        "XN-E": ("select", 7),  # 8
+        "XN-A": ("select", 8),  # 9
+    }
+
     def __init__(self, engine):
         self.engine = engine
         self.backend: Backend = Backend()
@@ -124,6 +139,7 @@ class YaweiRimeExtension:
             "SPW": ("backspace", None),
             "TKHR": ("delete", None),
         })
+        self._command_strokes.update(self.DEFAULT_CANDIDATE_STROKES)
         self._auto_backend_attempted = False
         self._backend_explicit = False
 
@@ -253,6 +269,8 @@ class YaweiRimeExtension:
         command = self._command_strokes.get(stroke.rtfcre)
         if command:
             name, value = command
+            if not self._can_handle_candidate_command(name, value, stroke.rtfcre):
+                return PreTranslateResult.PASS
             try:
                 if name in {"backspace", "delete"}:
                     state = self.backend.command(name, value)
@@ -297,3 +315,33 @@ class YaweiRimeExtension:
             log.error("Yawei Chinese backend failed; falling back to Plover", exc_info=True)
             consumed = False
         return PreTranslateResult.CONSUMED if consumed else PreTranslateResult.PASS
+
+    def _can_handle_candidate_command(self, name, value=None, stroke_name=None):
+        """Avoid swallowing normal Plover strokes when Rime has no target.
+
+        In particular, the standard Yawei number chords must continue to
+        produce their normal numeric output when no candidate menu is open.
+        The check is deliberately based on the controller/backend state and
+        does not impose a new encoding scheme.
+        """
+
+        if name in {"backspace", "delete"}:
+            return True
+        controller = self._candidate_controller
+        state = getattr(controller, "state", None)
+        if state is None:
+            state = getattr(self.backend, "state", None)
+        if state is None:
+            # Custom command bindings historically work with minimal backend
+            # adapters that do not expose CandidateState.  The built-in
+            # number chords are conservative and pass through in that case.
+            return stroke_name not in self.DEFAULT_CANDIDATE_STROKES
+        candidates = list(getattr(state, "candidates", ()) or ())
+        preedit = getattr(state, "preedit", "")
+        if name == "select":
+            return 0 <= int(value) < len(candidates)
+        if name in {"page_next", "page_prev"}:
+            return bool(candidates)
+        if name in {"commit", "cancel"}:
+            return bool(candidates or preedit)
+        return True
