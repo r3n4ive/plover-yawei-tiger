@@ -12,7 +12,7 @@ import os
 from pathlib import Path
 from typing import Callable, Optional
 
-from .rime_protocol import CandidateState
+from plover_multi_candidate.state import CandidateState
 
 
 RIME_KEY_BACKSPACE = 0xFF08
@@ -210,6 +210,25 @@ class RimeLibrary:
             self._dll.RimeFreeCommit(ctypes.byref(commit))
         return state
 
+    def commit_composition(self) -> CandidateState:
+        """Commit the current Rime composition without inserting a space.
+
+        Sending a literal space through ``RimeSimulateKeySequence`` is not
+        equivalent: it asks the schema to process a space key and can leave a
+        separator in the target application.  Plover's mode switches and
+        control strokes need the composition text committed while keeping the
+        Chinese no-space mode intact.
+        """
+
+        if not self._initialized:
+            self.start()
+        if not self._dll.RimeCommitComposition(self._session):
+            return self.context()
+        # RimeCommitComposition makes the result available through
+        # RimeGetCommit and clears the composition.  Read the context after
+        # the commit so the candidate window cannot retain stale preedit.
+        return self._add_commit(self.context())
+
     def select(self, index: int) -> CandidateState:
         if not self._dll.RimeSelectCandidateOnCurrentPage(self._session, int(index)):
             raise RuntimeError("librime candidate selection failed")
@@ -256,30 +275,50 @@ class RimeBackend:
         self.library = library
         self.stroke_to_input = stroke_to_input
         self.state = CandidateState()
+        # Rime uses an apostrophe to separate adjacent syllables.  Plover
+        # delivers one stroke at a time, so remember whether the previous
+        # stroke left a live composition before forwarding the next one.
+        self._composition_active = False
         self._state_listener = None
+        self._output = None
         self.last_command_handled = True
+
+    def set_output(self, output, backspace=None, key_combination=None):
+        """Set the fallback output callback used without a candidate UI."""
+
+        del key_combination
+        self._output = output
 
     def set_state_listener(self, listener):
         self._state_listener = listener
 
     def _set_state(self, state):
         self.state = state
+        self._composition_active = bool(getattr(state, "preedit", ""))
         if self._state_listener is not None:
             self._state_listener(state)
         return state
+
+    def _emit_commit_without_listener(self, state):
+        if state.committed and self._state_listener is None and self._output is not None:
+            self._output(state.committed)
 
     def consume(self, stroke, engine) -> bool:
         token = self.stroke_to_input(stroke.rtfcre)
         if not token:
             return False
+        if self._composition_active and not token.startswith("'"):
+            token = "'" + token
         self._set_state(self.library.input(token))
         if self.state.committed and self._state_listener is None:
-            engine._send_string(self.state.committed)
+            output = self._output or getattr(engine, "_send_string", None)
+            if output is not None:
+                output(self.state.committed)
         return True
 
     def command(self, name, value=None):
-        if name == "commit":
-            self._set_state(self.library.input(" "))
+        if name in {"commit", "force_commit"}:
+            self._set_state(self.library.commit_composition())
         elif name == "cancel":
             self.library.clear()
             self._set_state(self.library.context())
@@ -295,7 +334,9 @@ class RimeBackend:
             self._set_state(state)
         else:
             raise ValueError("unknown Rime command: %s" % name)
+        self._emit_commit_without_listener(self.state)
         return self.state
 
     def close(self):
+        self._composition_active = False
         self.library.close()

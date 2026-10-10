@@ -3,11 +3,11 @@ import json
 import pytest
 
 from plover_yawei_tiger.rime_protocol import (
-    CandidateState,
     command_message,
     parse_response,
     stroke_message,
 )
+from plover_multi_candidate.state import CandidateState
 
 
 def test_messages_are_json_lines():

@@ -28,6 +28,11 @@ def test_symmetric_yawei_chord_preserves_repeated_syllable():
     assert encoder.encode_stroke("BA-BA") == "ba'ba"
 
 
+def test_yawei_one_key_can_map_to_pinyin_without_changing_chord_joining():
+    encoder = YaweiRimeEncoder({"WI": "yi", "BA": "ba"})
+    assert encoder.encode_stroke("WI-BA") == "yiba"
+
+
 def test_symmetric_auxiliary_chord_stays_one_shape_token():
     encoder = YaweiRimeEncoder({}, {"BDNEO": "t"})
     assert encoder.encode_stroke("BDNEO-BDNEO") == "t"

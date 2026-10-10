@@ -1,5 +1,5 @@
-from plover_yawei_tiger.candidate import CandidateController
-from plover_yawei_tiger.rime_protocol import CandidateState
+from plover_multi_candidate.controller import CandidateController
+from plover_multi_candidate.state import CandidateState
 
 
 class FakeBackend:
@@ -56,7 +56,49 @@ def test_controller_updates_window_visibility():
 
     window = FakeWindow()
     controller = CandidateController(FakeBackend(), lambda text: None, window)
-    controller.update(CandidateState(preedit="ni", candidates=["你"]))
+    controller.update(CandidateState(preedit="ni", candidates=["你", "泥"]))
+    controller.update(CandidateState())
+    assert window.visible == [True, False]
+
+
+def test_controller_hides_popup_for_a_unique_candidate():
+    class FakeWindow:
+        def __init__(self):
+            self.visible = []
+
+        def set_state(self, state):
+            pass
+
+        def show_candidate_window(self):
+            self.visible.append(True)
+
+        def hide(self):
+            self.visible.append(False)
+
+    window = FakeWindow()
+    controller = CandidateController(FakeBackend(), lambda text: None, window)
+    controller.update(CandidateState(preedit="ba", candidates=["爸爸"], embedded="爸爸"))
+    assert window.visible == [False]
+
+
+def test_controller_keeps_popup_visible_for_line_buffer_preedit_without_choices():
+    class FakeWindow:
+        def __init__(self):
+            self.visible = []
+            self.states = []
+
+        def set_state(self, state):
+            self.states.append(state)
+
+        def show_candidate_window(self):
+            self.visible.append(True)
+
+        def hide(self):
+            self.visible.append(False)
+
+    window = FakeWindow()
+    controller = CandidateController(FakeBackend(), lambda text: None, window)
+    controller.update(CandidateState(preedit="爸爸", show_preedit=True))
     controller.update(CandidateState())
     assert window.visible == [True, False]
 

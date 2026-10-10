@@ -6,76 +6,41 @@ modifying Plover's installed files.  When a future Plover release exposes the
 same hook, the extension can switch to it without changing its backends.
 """
 
-from enum import Enum
-
-from plover import log
 from plover.steno import Stroke
-
-
-class PreTranslateResult(Enum):
-    """The decision returned by a pre-translation callback."""
-
-    PASS = "pass"
-    CONSUMED = "consumed"
+from plover_multi_candidate.routing import (
+    PreTranslateResult,
+    install_pre_translate_hook as _install_pre_translate_hook,
+)
 
 
 def install_pre_translate_hook(engine, callback):
-    """Register *callback* on one engine instance.
+    """Keep the historical Yawei import path working."""
 
-    The callback receives a :class:`plover.steno.Stroke` and may return
-    ``PreTranslateResult.CONSUMED`` to prevent Plover's normal translator from
-    seeing it.  Any other result passes the stroke through unchanged.  The
-    returned function unregisters the callback and restores the original
-    method when the last callback is removed.
-    """
-
-    callbacks = getattr(engine, "_yawei_pre_translate_callbacks", None)
-    if callbacks is None:
-        callbacks = []
-        original = engine._on_stroked
-
-        def dispatch(steno_keys):
-            stroke = Stroke(steno_keys)
-            for registered in tuple(callbacks):
-                try:
-                    result = registered(stroke)
-                except Exception:
-                    log.error("pre-translation callback failed", exc_info=True)
-                    continue
-                if result is PreTranslateResult.CONSUMED or result == PreTranslateResult.CONSUMED:
-                    return
-            original(steno_keys)
-
-        engine._yawei_pre_translate_callbacks = callbacks
-        engine._yawei_pre_translate_original = original
-        # This is intentionally an instance attribute: no installed Plover
-        # files are changed and stopping the extension completely undoes it.
-        engine._on_stroked = dispatch
-
-    callbacks.append(callback)
+    engine._multi_candidate_stroke_factory = lambda keys: Stroke(keys)
+    unregister = _install_pre_translate_hook(engine, callback)
     removed = False
 
-    def unregister():
+    def wrapped_unregister():
         nonlocal removed
         if removed:
             return
         removed = True
-        try:
-            callbacks.remove(callback)
-        except ValueError:
-            return
-        if not callbacks:
-            engine._on_stroked = engine._yawei_pre_translate_original
-            del engine._yawei_pre_translate_callbacks
-            del engine._yawei_pre_translate_original
+        unregister()
+        if hasattr(engine, "_multi_candidate_stroke_factory"):
+            del engine._multi_candidate_stroke_factory
 
-    return unregister
+    return wrapped_unregister
 
 
 def _is_control_mapping(mapping):
     """Return whether a dictionary value belongs to Plover's command layer."""
 
     if not mapping:
+        return False
+    # Native Yawei candidate values use an equals-prefixed protocol marker,
+    # but they are consumed before Plover's translator and must not be
+    # classified as ordinary Plover commands.
+    if mapping.startswith("=YAW-CAND:"):
         return False
     # Plover's brace syntax covers key combinations, macros, mode changes,
     # attached symbols and spacing directives.  Chinese dictionary values are

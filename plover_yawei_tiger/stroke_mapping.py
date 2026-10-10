@@ -58,6 +58,39 @@ class YaweiRimeEncoder:
                 parts.append(token)
         return "".join(parts)
 
+    def stroke_kind(self, stroke: str) -> str:
+        """Classify a stroke as pinyin, auxiliary, or unknown.
+
+        A trailing sequence of auxiliary-only strokes can be exposed under
+        the preceding pinyin code for candidate selection.  A trailing
+        pinyin stroke must remain a longer phrase and must not be exposed as
+        a completion.
+        """
+
+        canonical = stroke.upper()
+        if canonical in self.pinyin_map:
+            return "pinyin"
+        if "-" not in canonical:
+            return "unknown"
+        left, right = canonical.split("-", 1)
+        if not left or not right:
+            return "unknown"
+        if left == right:
+            if left in self.pinyin_map:
+                return "pinyin"
+            if left in self.auxiliary_map:
+                return "auxiliary"
+            return "unknown"
+        kinds = []
+        for part in (left, right):
+            if part in self.auxiliary_map:
+                kinds.append("auxiliary")
+            elif part in self.pinyin_map:
+                kinds.append("pinyin")
+            else:
+                return "unknown"
+        return "auxiliary" if all(kind == "auxiliary" for kind in kinds) else "pinyin"
+
     def encode_outline(self, strokes: Iterable[str]) -> str:
         tokens = [token for stroke in strokes if (token := self.encode_stroke(stroke))]
         return " ".join(tokens)

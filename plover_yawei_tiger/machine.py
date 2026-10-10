@@ -8,6 +8,8 @@ upper two bits identify the field and are not part of the stroke.
 
 from __future__ import annotations
 
+import time
+
 import hid
 
 from plover import log
@@ -18,7 +20,10 @@ VENDOR_ID = 0x0000
 PRODUCT_ID = 0x0000
 USAGE_PAGE = 0xFF00
 USAGE = 0x0001
+PRODUCT_NAME = "YW-V-3"
 REPORT_MARKERS = (0x1B, 0x8B)
+START_RETRIES = 10
+START_RETRY_DELAY = 0.2
 
 # The four six-bit fields are ordered as observed on YW-V-3.  The final two
 # positions in fields 1 and 3 are the thumb keys; their names follow the
@@ -74,34 +79,61 @@ class YaweiV3(ThreadedStenotypeBase):
     def start_capture(self):
         self.stop_capture()
         self._initializing()
-        devices = [
-            item
-            for item in hid.enumerate(VENDOR_ID, PRODUCT_ID)
-            if item.get("usage_page") == USAGE_PAGE and item.get("usage") == USAGE
-        ]
-        if not devices:
+        self._device = self._connect_device()
+        if self._device is None:
             log.warning("No Yawei YW-V-3 HID device found")
             self._error()
             return
-        try:
-            self._device = hid.device()
-            self._device.open_path(devices[0]["path"])
-        except (IOError, OSError):
-            log.warning("Unable to open Yawei YW-V-3 HID device", exc_info=True)
-            self._device = None
-            self._error()
-            return
+
         ThreadedStenotypeBase.start_capture(self)
+
+    @staticmethod
+    def _connect_device():
+        """Retry enumeration and open while Windows finishes HID setup."""
+
+        for attempt in range(START_RETRIES):
+            devices = [
+                item
+                for item in hid.enumerate(VENDOR_ID, PRODUCT_ID)
+                if item.get("usage_page") == USAGE_PAGE
+                and item.get("usage") == USAGE
+                and str(item.get("product_string") or "").upper() == PRODUCT_NAME
+            ]
+            if devices:
+                try:
+                    device = hid.device()
+                    device.open_path(devices[0]["path"])
+                    return device
+                except (IOError, OSError):
+                    if attempt + 1 >= START_RETRIES:
+                        log.warning("Unable to open Yawei YW-V-3 HID device", exc_info=True)
+                        return None
+            if attempt + 1 < START_RETRIES:
+                time.sleep(START_RETRY_DELAY)
+        return None
 
     def run(self):
         self._ready()
         while not self.finished.isSet():
             try:
-                report = self._device.read(8, 100)
+                report = self._device.read(64, 100)
             except (IOError, OSError):
                 log.warning("Yawei YW-V-3 disconnected", exc_info=True)
-                self._error()
-                return
+                device, self._device = self._device, None
+                if device is not None:
+                    try:
+                        device.close()
+                    except (IOError, OSError):
+                        pass
+                self._initializing()
+                while not self.finished.isSet():
+                    self._device = self._connect_device()
+                    if self._device is not None:
+                        self._ready()
+                        break
+                if self._device is None:
+                    return
+                continue
             if not report:
                 continue
             keys = self._decode(report)

@@ -7,7 +7,9 @@ import subprocess
 import threading
 from typing import Optional
 
-from .rime_protocol import CandidateState, command_message, parse_response, stroke_message
+from plover_multi_candidate.state import CandidateState
+
+from .rime_protocol import command_message, parse_response, stroke_message
 
 
 class SidecarBackend:

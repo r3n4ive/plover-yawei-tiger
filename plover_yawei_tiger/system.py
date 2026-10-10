@@ -65,6 +65,7 @@ KEYMAPS['Yawei V3'] = {
 DICTIONARIES_ROOT = 'asset:plover_yawei_tiger:dictionaries'
 
 DEFAULT_DICTIONARIES = (
+        "yw-native-candidates.json",
         "8105.json", "base.json",
         "yw-23lve.json", "yw-4lve.json", "yw-duolve.json", "yw-houding-lve.json","yw-gongneng.json", "yw-xwzi.json",
         "yw-fixed.json", "yw-fixed.extend.json"

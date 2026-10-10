@@ -16,8 +16,13 @@ speller:
 
 translator:
   dictionary: yawei_tiger
-  enable_user_dict: true
+  # The Plover dictionary is generated and deterministic.  Do not let an
+  # earlier mistaken completion learn a shorter code and outrank the exact
+  # entry (for example ba'ba -> 爸爸 vs. 叭叭叭).
+  enable_user_dict: false
   enable_sentence: true
+  # Homophones with auxiliary strokes receive generated exact-code aliases;
+  # generic completion stays off so longer phrases cannot outrank them.
   enable_completion: false
 
 menu:

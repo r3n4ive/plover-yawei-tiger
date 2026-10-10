@@ -29,13 +29,30 @@ def convert(paths, encoder):
         for outline, value in entries.items():
             if not _literal(value):
                 continue
-            parts = [encoder.encode_stroke(stroke) for stroke in outline.split("/")]
+            strokes = outline.split("/")
+            parts = [encoder.encode_stroke(stroke) for stroke in strokes]
             if not all(parts):
                 continue
-            row = ("'".join(parts), value)
-            if row not in seen:
-                seen.add(row)
-                rows.append(row)
+            rows_to_add = [("'".join(parts), value)]
+
+            # Homophones whose remaining strokes are purely auxiliary should
+            # be selectable from the pinyin code.  Do not alias a longer
+            # pinyin phrase such as tongxiao'dadan to tongxiao; that would
+            # recreate the unwanted bababa-style completions.
+            kinds = [encoder.stroke_kind(stroke) for stroke in strokes]
+            first_aux = next((index for index, kind in enumerate(kinds)
+                              if kind == "auxiliary"), None)
+            if (first_aux is not None and first_aux > 0
+                    and all(kind == "pinyin" for kind in kinds[:first_aux])
+                    and all(kind == "auxiliary" for kind in kinds[first_aux:])):
+                alias = "'".join(parts[:first_aux])
+                if alias and alias != "'".join(parts):
+                    rows_to_add.append((alias, value))
+
+            for row in rows_to_add:
+                if row not in seen:
+                    seen.add(row)
+                    rows.append(row)
     return rows
 
 

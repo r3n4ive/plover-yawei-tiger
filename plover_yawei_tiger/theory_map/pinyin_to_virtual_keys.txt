@@ -374,6 +374,7 @@ yang	INO
 yao	IAO
 ye	IE
 yi	I
+yi	WI
 yin	IN
 ying	INE
 yo	EA

@@ -17,7 +17,7 @@ PACKAGE_DATA = ROOT / "plover_yawei_tiger" / "rime_data"
 
 # Keep this list aligned with system.DEFAULT_DICTIONARIES.
 DEFAULT_SOURCES = (
-    "8105.json", "base.json", "yw-23lve.json", "yw-4lve.json",
+    "yw-native-candidates.json", "8105.json", "base.json", "yw-23lve.json", "yw-4lve.json",
     "yw-duolve.json", "yw-houding-lve.json", "yw-gongneng.json",
     "yw-xwzi.json", "yw-fixed.json", "yw-fixed.extend.json",
 )

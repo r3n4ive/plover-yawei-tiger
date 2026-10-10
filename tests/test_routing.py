@@ -62,3 +62,40 @@ def test_hook_consumes_and_restores_instance_method():
     assert calls == [("original", "pass")]
     unregister()
     assert engine._on_stroked is original
+
+
+def test_hook_wraps_translator_when_machine_callback_is_already_cached():
+    calls = []
+    translated = []
+    engine = types.SimpleNamespace()
+
+    def original(keys):
+        calls.append(("original", keys))
+
+    class Translator:
+        def translate(self, stroke):
+            translated.append(stroke.rtfcre)
+
+    # This mirrors Plover 5: the machine can retain the old engine callback,
+    # while that callback calls the translator directly.
+    engine._on_stroked = original
+    engine._translator = Translator()
+    unregister = install_pre_translate_hook(
+        engine,
+        lambda stroke: PreTranslateResult.CONSUMED
+        if stroke.rtfcre == "consume" else PreTranslateResult.PASS,
+    )
+    import plover_yawei_tiger.routing as routing
+    old = routing.Stroke
+    routing.Stroke = lambda keys: FakeStroke(keys)
+    try:
+        engine._translator.translate(FakeStroke("consume"))
+        engine._translator.translate(FakeStroke("pass"))
+    finally:
+        routing.Stroke = old
+    assert calls == []
+    assert translated == ["pass"]
+    unregister()
+    translated.clear()
+    engine._translator.translate(FakeStroke("after"))
+    assert translated == ["after"]

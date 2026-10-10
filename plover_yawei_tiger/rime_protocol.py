@@ -8,31 +8,9 @@ the same backend interface can later be backed by a direct DLL binding.
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
-
-@dataclass
-class CandidateState:
-    """Current Rime composition and candidates."""
-
-    preedit: str = ""
-    candidates: List[str] = field(default_factory=list)
-    page: int = 0
-    page_count: int = 0
-    highlighted: int = 0
-    committed: str = ""
-
-    @classmethod
-    def from_dict(cls, value: Dict[str, Any]) -> "CandidateState":
-        return cls(
-            preedit=str(value.get("preedit", "")),
-            candidates=[str(item) for item in value.get("candidates", ())],
-            page=int(value.get("page", 0)),
-            page_count=int(value.get("page_count", 0)),
-            highlighted=int(value.get("highlighted", 0)),
-            committed=str(value.get("committed", "")),
-        )
+from plover_multi_candidate.state import CandidateState
 
 
 def stroke_message(stroke: str) -> str:
