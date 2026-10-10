@@ -9,3 +9,6 @@ plover-yawei-tiger-*/
 build-test/
 rime-check/
 rime-check.7z
+
+# Local analysis reports and candidate-window screenshots.
+reports/
