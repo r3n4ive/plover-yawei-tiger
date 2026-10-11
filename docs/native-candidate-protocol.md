@@ -74,6 +74,29 @@ The local Wanxiang checkout used during development was revision
 `908108a09121aaf7ba2cad1fcfbe71b427ea9090` and is licensed CC BY 4.0; any
 redistribution of derived frequency data must retain its attribution.
 
+### Review before activation
+
+Generate a comparison report using the same parser and ranking rules as the
+runtime. This does not modify either dictionary or change Plover's settings:
+
+```text
+python tools/compare_candidate_frequency.py plover_yawei_tiger/dictionaries/yw-native-candidates.json build/yw-native-candidates-wanxiang.json --outline BA-BA --outline BDUEO-XIAO --outline A-BA --output build/candidate-frequency-review.md
+```
+
+The UTF-8 Markdown report includes coverage, order changes, first-candidate
+changes, selected outlines, and up to 12 examples per change category. Use
+`--example-limit` to adjust that limit. Candidate additions/removals and new or
+deleted outlines are reported separately, not counted as ranking changes.
+Coverage counts candidate entries across the entire dictionary under review;
+the same word under different outlines counts separately. Ranking percentages
+use only common outlines with identical candidate texts as their denominator.
+These statistics are not an accuracy or real-world usage measurement.
+
+Ordinary translations are excluded. A requested outline with no marked entry
+is explicitly shown as missing, which does not mean that Plover cannot produce
+it through a plain dictionary entry. Other theory markers can be compared with
+`--marker`, for example `--marker =PLOVER-CAND:`.
+
 For hand-written entries, a list of strings is accepted:
 
 ```json
