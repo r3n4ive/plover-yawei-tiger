@@ -9,6 +9,7 @@ from plover_yawei_tiger.extension import (
     _load_candidate_window_config,
     _load_mode_switch_bindings,
     _configured_native_candidate_path,
+    _candidate_dictionary_source,
     _native_candidate_dictionary_view,
     _normalize_mode_stroke,
 )
@@ -220,6 +221,35 @@ def test_experimental_candidate_table_is_injected_and_formal_disabled(
                for item in dictionaries)
     assert any(str(item.path) == str(experimental) and not item.enabled
                for item in dictionaries)
+
+
+def test_startup_log_identifies_active_experimental_table_and_weighted_groups(
+        tmp_path, monkeypatch, caplog):
+    experimental = tmp_path / "yw-native-candidates-ranked.json"
+    experimental.write_text("{}", encoding="utf-8")
+    config = tmp_path / "yawei_tiger.cfg"
+    config.write_text("[native_candidates]\npath = %s\n" % experimental,
+                      encoding="utf-8")
+    monkeypatch.setenv("PLOVER_YAWEI_COMMAND_CONFIG", str(config))
+
+    formal = mode_dictionary("yw-native-candidates.json", True)
+    selected = SimpleNamespace(
+        path=str(experimental), short_path=str(experimental), enabled=True,
+        items=lambda: {
+            ("BA",): '=YAW-CAND:{"items":[{"text":"爸爸","weight":9},'
+                      '{"text":"巴巴","weight":2}]}',
+        }.items(),
+    )
+    engine = ConfigurableEngine({}, [formal, selected])
+    extension = YaweiRimeExtension(engine)
+    extension._configure_default_backend()
+
+    assert isinstance(extension.backend, NativeCandidateBackend)
+    assert _candidate_dictionary_source(engine.dictionaries, tmp_path) == str(
+        experimental.resolve()
+    )
+    assert "candidate_table=%s" % experimental.resolve() in caplog.text
+    assert "weighted_multi_candidate_groups=1" in caplog.text
 
 
 def test_mode_strokes_are_canonical_and_cannot_alias_one_physical_chord(

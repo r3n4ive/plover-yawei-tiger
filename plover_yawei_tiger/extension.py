@@ -187,17 +187,7 @@ def _native_candidate_dictionary_view(dictionaries, package_root: Path):
         getattr(dictionary, "short_path", None),
         getattr(dictionary, "path", None),
     )
-    selected = None
-    if configured_path is not None:
-        selected = next((dictionary for dictionary in loaded
-                         if getattr(dictionary, "enabled", True)
-                         and any(_same_dictionary_file(path, configured_path)
-                                 for path in paths(dictionary))), None)
-
-    formal = next((dictionary for dictionary in loaded
-                   if getattr(dictionary, "enabled", True)
-                   and any(_path_matches_dictionary(path, "yw-native-candidates.json")
-                           for path in paths(dictionary))), None)
+    selected, formal = _candidate_dictionary_pair(loaded, configured_path, paths)
     chosen = selected or formal
     if chosen is None:
         return SimpleNamespace(dicts=[
@@ -231,6 +221,42 @@ def _native_candidate_dictionary_view(dictionaries, package_root: Path):
     if selected is None and formal is not None:
         chosen = formal
     return SimpleNamespace(dicts=remaining[:insert_at] + [chosen] + remaining[insert_at:])
+
+
+def _candidate_dictionary_pair(loaded, configured_path, paths=None):
+    """Find the enabled experimental and packaged candidate dictionaries."""
+
+    if paths is None:
+        paths = lambda dictionary: (
+            getattr(dictionary, "short_path", None),
+            getattr(dictionary, "path", None),
+        )
+    selected = None
+    if configured_path is not None:
+        selected = next((dictionary for dictionary in loaded
+                         if getattr(dictionary, "enabled", True)
+                         and any(_same_dictionary_file(path, configured_path)
+                                 for path in paths(dictionary))), None)
+    formal = next((dictionary for dictionary in loaded
+                   if getattr(dictionary, "enabled", True)
+                   and any(_path_matches_dictionary(path, "yw-native-candidates.json")
+                           for path in paths(dictionary))), None)
+    return selected, formal
+
+
+def _candidate_dictionary_source(dictionaries, package_root: Path) -> str:
+    """Describe the candidate table that is currently supplying outlines."""
+
+    configured_path = _configured_native_candidate_path(package_root)
+    loaded = list(getattr(dictionaries, "dicts", ()))
+    selected, formal = _candidate_dictionary_pair(loaded, configured_path)
+    if selected is not None:
+        return str(configured_path)
+    if formal is not None:
+        if configured_path is not None:
+            return "packaged (experimental table not loaded: %s)" % configured_path
+        return "packaged yw-native-candidates.json"
+    return "no candidate table loaded"
 
 
 def _new_dictionary_config(path: Path, enabled=True):
@@ -1203,14 +1229,24 @@ class YaweiRimeExtension:
             log.warning("Unable to configure native Yawei candidate backend", exc_info=True)
             native = None
         if native is not None:
+            candidate_source = _candidate_dictionary_source(
+                self.engine.dictionaries, package_root
+            )
+            weighted_groups = sum(
+                1 for items in native.index.exact.values()
+                if len(items) > 1 and any(item.weight is not None for item in items)
+            )
             log.info(
                 "using native Plover candidate backend (%d outlines; "
                 "line_buffer=%s; commit_on_prefix_miss=%s; "
-                "flush_before_plover_command=%s)",
+                "flush_before_plover_command=%s; candidate_table=%s; "
+                "weighted_multi_candidate_groups=%d)",
                 len(native.index.exact),
                 native.line_buffer_enabled,
                 native.commit_on_prefix_miss,
                 native.flush_before_plover_command,
+                candidate_source,
+                weighted_groups,
             )
             self.set_backend(native)
             self._backend_explicit = False
