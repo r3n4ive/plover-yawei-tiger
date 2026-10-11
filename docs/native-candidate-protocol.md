@@ -77,6 +77,27 @@ The local Wanxiang checkout used during development was revision
 `908108a09121aaf7ba2cad1fcfbe71b427ea9090` and is licensed CC BY 4.0; any
 redistribution of derived frequency data must retain its attribution.
 
+### Switching the experiment table
+
+The packaged `yw-native-candidates.json` remains the default.  To test a
+generated table without replacing the packaged file, add this to the user
+`yawei_tiger.cfg`:
+
+```ini
+[native_candidates]
+path = C:\path\to\yw-native-candidates-wanxiang.json
+```
+
+`PLOVER_YAWEI_NATIVE_CANDIDATES` can be used instead and takes precedence over
+the CFG.  The path may be relative to the CFG, but an absolute path is less
+ambiguous.  On restart, the extension inserts the selected table in the
+packaged table's dictionary position and disables the packaged table, so both
+tables cannot shadow one another.  Ordinary dictionaries, symbol mappings and
+the three backend-mode marker dictionaries are unchanged.  Remove the option
+(or clear the environment variable) and restart Plover to restore the
+packaged table.  A missing or non-file path is ignored with a warning and also
+falls back to the packaged table.
+
 ### Review before activation
 
 Generate a comparison report using the same parser and ranking rules as the

@@ -13,6 +13,7 @@ import configparser
 import copy
 import os
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Optional
 
 from plover import log
@@ -122,6 +123,119 @@ def _load_line_buffer_config(package_root: Path):
         "show_preedit": show_preedit,
         "force_unbind_strokes": (force_unbind,) if force_unbind else (),
     }
+
+
+def _configured_native_candidate_path(package_root: Path) -> Optional[Path]:
+    """Return the optional experimental candidate dictionary path."""
+
+    configured = os.environ.get("PLOVER_YAWEI_NATIVE_CANDIDATES")
+    if configured is None:
+        config_path = _yawei_config_path(package_root)
+        parser = configparser.ConfigParser(interpolation=None)
+        if config_path is not None:
+            parser.read(config_path, encoding="utf-8")
+        configured = parser.get("native_candidates", "path", fallback="")
+    configured = configured.strip()
+    if not configured:
+        return None
+
+    path = Path(configured).expanduser()
+    if not _is_alternate_candidate_dictionary(path):
+        log.warning(
+            "Yawei experimental candidate filename must match "
+            "yw-native-candidates-*.json: %s", path
+        )
+        return None
+    if not path.is_absolute():
+        config_path = _yawei_config_path(package_root)
+        path = (config_path.parent / path) if config_path else Path.cwd() / path
+    try:
+        path = path.resolve(strict=True)
+    except (OSError, RuntimeError):
+        log.warning("Yawei experimental candidate dictionary does not exist: %s", path)
+        return None
+    if not path.is_file():
+        log.warning("Yawei experimental candidate path is not a file: %s", path)
+        return None
+    return path
+
+
+def _same_dictionary_file(path, configured_path: Path) -> bool:
+    if not path or str(path).startswith("asset:"):
+        return False
+    try:
+        return Path(path).expanduser().resolve() == configured_path
+    except (OSError, RuntimeError, TypeError, ValueError):
+        return False
+
+
+def _is_alternate_candidate_dictionary(path) -> bool:
+    """Recognize generated Yawei candidate-table variants by filename."""
+
+    if not path or str(path).startswith("asset:"):
+        return False
+    name = Path(str(path).replace("\\", "/")).name.lower()
+    return name.startswith("yw-native-candidates-") and name.endswith(".json")
+
+
+def _native_candidate_dictionary_view(dictionaries, package_root: Path):
+    """Put the selected candidate table in the formal table's lookup slot."""
+
+    loaded = list(getattr(dictionaries, "dicts", ()))
+    configured_path = _configured_native_candidate_path(package_root)
+    paths = lambda dictionary: (
+        getattr(dictionary, "short_path", None),
+        getattr(dictionary, "path", None),
+    )
+    selected = None
+    if configured_path is not None:
+        selected = next((dictionary for dictionary in loaded
+                         if getattr(dictionary, "enabled", True)
+                         and any(_same_dictionary_file(path, configured_path)
+                                 for path in paths(dictionary))), None)
+
+    formal = next((dictionary for dictionary in loaded
+                   if getattr(dictionary, "enabled", True)
+                   and any(_path_matches_dictionary(path, "yw-native-candidates.json")
+                           for path in paths(dictionary))), None)
+    chosen = selected or formal
+    if chosen is None:
+        return SimpleNamespace(dicts=[
+            dictionary for dictionary in loaded
+            if not any(_is_alternate_candidate_dictionary(path)
+                       or (configured_path is not None
+                           and _same_dictionary_file(path, configured_path))
+                       for path in paths(dictionary))
+        ])
+
+    role_indexes = [
+        index for index, dictionary in enumerate(loaded)
+        if dictionary is chosen
+        or any(_path_matches_dictionary(path, "yw-native-candidates.json")
+               or _is_alternate_candidate_dictionary(path)
+               or (configured_path is not None
+                   and _same_dictionary_file(path, configured_path))
+               for path in paths(dictionary))
+    ]
+    insert_at = min(role_indexes) if role_indexes else 0
+    remaining = [
+        dictionary for dictionary in loaded
+        if not any(_path_matches_dictionary(path, "yw-native-candidates.json")
+                   or _is_alternate_candidate_dictionary(path)
+                   or (configured_path is not None
+                       and _same_dictionary_file(path, configured_path))
+                   for path in paths(dictionary))
+    ]
+    # When the configured table has not finished loading yet, retain the
+    # packaged table until the next dictionaries_loaded notification.
+    if selected is None and formal is not None:
+        chosen = formal
+    return SimpleNamespace(dicts=remaining[:insert_at] + [chosen] + remaining[insert_at:])
+
+
+def _new_dictionary_config(path: Path, enabled=True):
+    from plover.config import DictionaryConfig
+    return DictionaryConfig(str(path), enabled=enabled)
 
 
 def _load_candidate_window_config(package_root: Path):
@@ -428,10 +542,13 @@ def create_native_candidate_backend_from_environment(
     the first rollout and can be supplied with ``PLOVER_YAWEI_AUX_MAP``.
     """
 
-    index = CandidateIndex.from_dictionaries(dictionaries)
+    package_root = Path(__file__).resolve().parent
+    candidate_dictionaries = _native_candidate_dictionary_view(
+        dictionaries, package_root
+    )
+    index = CandidateIndex.from_dictionaries(candidate_dictionaries)
     if not index:
         return None
-    package_root = Path(__file__).resolve().parent
     user_root = _yawei_user_config_dir()
     auxiliary = {}
     map_path = os.environ.get("PLOVER_YAWEI_AUX_MAP")
@@ -772,6 +889,104 @@ class YaweiRimeExtension:
         except (AttributeError, TypeError, KeyError):
             log.warning("Unable to register Yawei backend mode dictionaries", exc_info=True)
 
+    def _ensure_native_candidate_dictionary(self):
+        """Add the configured experiment table without changing other dictionaries."""
+
+        package_root = Path(__file__).resolve().parent
+        candidate_path = _configured_native_candidate_path(package_root)
+        config = getattr(self.engine, "config", None)
+        if config is None:
+            return
+        try:
+            dictionaries = list(config["dictionaries"])
+        except (KeyError, TypeError, AttributeError):
+            return
+
+        def dictionary_paths(dictionary):
+            return (
+                getattr(dictionary, "short_path", None),
+                getattr(dictionary, "path", None),
+            )
+
+        if candidate_path is None:
+            # A prior run may have persisted the generated table in Plover's
+            # dictionary list. Clearing the setting restores the formal table.
+            has_experiment = any(
+                any(_is_alternate_candidate_dictionary(path)
+                    for path in dictionary_paths(dictionary))
+                for dictionary in dictionaries
+            )
+            if not has_experiment:
+                return
+            changed = False
+            restored = []
+            for dictionary in dictionaries:
+                is_formal = any(_path_matches_dictionary(
+                    path, "yw-native-candidates.json"
+                ) for path in dictionary_paths(dictionary))
+                is_experiment = any(_is_alternate_candidate_dictionary(path)
+                                    for path in dictionary_paths(dictionary))
+                enabled = getattr(dictionary, "enabled", True)
+                desired = True if is_formal else False if is_experiment else enabled
+                if bool(enabled) != bool(desired):
+                    dictionary = _replace_dictionary_enabled(dictionary, desired)
+                    changed = True
+                restored.append(dictionary)
+            if changed:
+                try:
+                    self.engine.config = {"dictionaries": restored}
+                except (AttributeError, TypeError, KeyError):
+                    log.warning("Unable to restore packaged Yawei candidate table",
+                                exc_info=True)
+            return
+
+        matching = next((dictionary for dictionary in dictionaries
+                         if any(_same_dictionary_file(path, candidate_path)
+                                for path in dictionary_paths(dictionary))), None)
+        if matching is not None:
+            if getattr(matching, "enabled", True):
+                pass
+            else:
+                dictionaries = [
+                    _replace_dictionary_enabled(dictionary, True)
+                    if dictionary is matching else dictionary
+                    for dictionary in dictionaries
+                ]
+        else:
+            try:
+                dictionary_config = _new_dictionary_config(candidate_path)
+            except ImportError:  # pragma: no cover - only minimal test/old builds
+                log.warning("Unable to register experimental Yawei candidate table: "
+                            "Plover DictionaryConfig is unavailable")
+                return
+            formal_index = next((index for index, dictionary in enumerate(dictionaries)
+                                 if _path_matches_dictionary(
+                                     getattr(dictionary, "path", ""),
+                                     "yw-native-candidates.json")), 0)
+            dictionaries.insert(formal_index, dictionary_config)
+        # Keep exactly one generated candidate table enabled. The formal table
+        # is restored automatically when the CFG path is later cleared.
+        changed = []
+        for dictionary in dictionaries:
+            is_selected = any(_same_dictionary_file(path, candidate_path)
+                              for path in dictionary_paths(dictionary))
+            is_formal = any(_path_matches_dictionary(path,
+                                                     "yw-native-candidates.json")
+                            for path in dictionary_paths(dictionary))
+            is_experiment = any(_is_alternate_candidate_dictionary(path)
+                                for path in dictionary_paths(dictionary))
+            current = getattr(dictionary, "enabled", True)
+            desired = True if is_selected else False if is_formal or is_experiment else current
+            if bool(current) != bool(desired):
+                dictionary = _replace_dictionary_enabled(dictionary, desired)
+            changed.append(dictionary)
+        dictionaries = changed
+        try:
+            self.engine.config = {"dictionaries": dictionaries}
+        except (AttributeError, TypeError, KeyError):
+            log.warning("Unable to register experimental Yawei candidate table",
+                        exc_info=True)
+
     def _switch_backend_mode(self, mode: str):
         """Use plover-dict-commands, with a local fallback for old installs."""
 
@@ -865,6 +1080,7 @@ class YaweiRimeExtension:
         self.engine.hook_connect("dictionaries_loaded", self._dictionaries_loaded)
         self._install_candidate_dictionary_filter()
         self._ensure_mode_dictionaries()
+        self._ensure_native_candidate_dictionary()
         self._configure_default_backend()
         self._unregister = install_pre_translate_hook(self.engine, self._before_translate)
 
@@ -1009,7 +1225,7 @@ class YaweiRimeExtension:
         active_mode = _active_backend_mode(dictionaries, package_root)
         refresh = getattr(self.backend, "refresh_dictionaries", None)
         if refresh is not None and active_mode in {None, self._selected_backend_mode}:
-            refresh(dictionaries)
+            refresh(_native_candidate_dictionary_view(dictionaries, package_root))
         # plover-dict-commands emits this hook after TOGGLE_DICT changes the
         # marker dictionaries. Rebuild the backend so a mode chord changes
         # buffering/output policy without changing the ordinary dictionary

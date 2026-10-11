@@ -8,6 +8,8 @@ from plover_yawei_tiger.extension import (
     _active_backend_mode,
     _load_candidate_window_config,
     _load_mode_switch_bindings,
+    _configured_native_candidate_path,
+    _native_candidate_dictionary_view,
     _normalize_mode_stroke,
 )
 from plover_yawei_tiger.candidate import CandidateController
@@ -116,6 +118,108 @@ def test_candidate_window_settings_are_loaded_from_user_cfg(tmp_path, monkeypatc
     assert values["position_mode"] == "fixed"
     assert values["fixed_position"] == "top_right"
     assert values["margin"] == 20
+
+
+def test_experimental_native_candidate_path_supports_cfg_and_relative_paths(
+        tmp_path, monkeypatch):
+    candidate = tmp_path / "yw-native-candidates-relative.json"
+    candidate.write_text("{}", encoding="utf-8")
+    config = tmp_path / "yawei_tiger.cfg"
+    config.write_text(
+        "[native_candidates]\npath = yw-native-candidates-relative.json\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("PLOVER_YAWEI_COMMAND_CONFIG", str(config))
+    assert _configured_native_candidate_path(tmp_path) == candidate.resolve()
+
+    override = tmp_path / "yw-native-candidates-override.json"
+    override.write_text("{}", encoding="utf-8")
+    monkeypatch.setenv("PLOVER_YAWEI_NATIVE_CANDIDATES", str(override))
+    assert _configured_native_candidate_path(tmp_path) == override.resolve()
+
+
+def test_invalid_experimental_native_candidate_path_falls_back(tmp_path, monkeypatch):
+    config = tmp_path / "yawei_tiger.cfg"
+    config.write_text("[native_candidates]\n"
+                      "path = yw-native-candidates-missing.json\n", encoding="utf-8")
+    monkeypatch.setenv("PLOVER_YAWEI_COMMAND_CONFIG", str(config))
+    assert _configured_native_candidate_path(tmp_path) is None
+
+
+def test_experimental_candidate_table_replaces_formal_slot(tmp_path, monkeypatch):
+    experimental = tmp_path / "yw-native-candidates-wanxiang.json"
+    experimental.write_text("{}", encoding="utf-8")
+    config = tmp_path / "yawei_tiger.cfg"
+    config.write_text("[native_candidates]\npath = %s\n" % experimental,
+                      encoding="utf-8")
+    monkeypatch.setenv("PLOVER_YAWEI_COMMAND_CONFIG", str(config))
+    normal = SimpleNamespace(
+        path="symbols.json", short_path="symbols.json", enabled=True,
+        items=lambda: {}.items(),
+    )
+    formal = SimpleNamespace(
+        path="asset:plover_yawei_tiger:dictionaries/yw-native-candidates.json",
+        short_path="yw-native-candidates.json", enabled=True,
+        items=lambda: {("BA",): '=YAW-CAND:["正式"]'}.items(),
+    )
+    selected = SimpleNamespace(
+        path=str(experimental), short_path=str(experimental), enabled=True,
+        items=lambda: {("BA",): '=YAW-CAND:["实验"]'}.items(),
+    )
+    view = _native_candidate_dictionary_view(
+        SimpleNamespace(dicts=[normal, formal, selected]), tmp_path
+    )
+    assert view.dicts == [normal, selected]
+    index = CandidateIndex.from_dictionaries(view)
+    assert [item.text for item in index.candidates_for(("BA",))] == ["实验"]
+
+    config.write_text("[native_candidates]\npath =\n", encoding="utf-8")
+    monkeypatch.delenv("PLOVER_YAWEI_NATIVE_CANDIDATES", raising=False)
+    restored = CandidateIndex.from_dictionaries(
+        _native_candidate_dictionary_view(
+            SimpleNamespace(dicts=[normal, formal, selected]), tmp_path
+        )
+    )
+    assert [item.text for item in restored.candidates_for(("BA",))] == ["正式"]
+
+
+def test_experimental_candidate_table_is_injected_and_formal_disabled(
+        tmp_path, monkeypatch):
+    experimental = tmp_path / "yw-native-candidates-weighted.json"
+    experimental.write_text("{}", encoding="utf-8")
+    config = tmp_path / "yawei_tiger.cfg"
+    config.write_text("[native_candidates]\npath = %s\n" % experimental,
+                      encoding="utf-8")
+    monkeypatch.setenv("PLOVER_YAWEI_COMMAND_CONFIG", str(config))
+
+    import plover_yawei_tiger.extension as extension_module
+    monkeypatch.setattr(
+        extension_module,
+        "_new_dictionary_config",
+        lambda path: SimpleNamespace(
+            path=str(path), short_path=str(path), enabled=True,
+            items=lambda: {}.items(),
+        ),
+    )
+    formal = mode_dictionary("yw-native-candidates.json", True)
+    normal = mode_dictionary("symbols.json", True)
+    engine = ConfigurableEngine({}, [normal, formal])
+    extension = YaweiRimeExtension(engine)
+    extension._ensure_native_candidate_dictionary()
+    dictionaries = engine.config["dictionaries"]
+    assert any(str(item.path) == str(experimental) and item.enabled
+               for item in dictionaries)
+    assert any(item.path == "yw-native-candidates.json" and not item.enabled
+               for item in dictionaries)
+    assert any(item.path == "symbols.json" and item.enabled for item in dictionaries)
+
+    config.write_text("[native_candidates]\npath =\n", encoding="utf-8")
+    extension._ensure_native_candidate_dictionary()
+    dictionaries = engine.config["dictionaries"]
+    assert any(item.path == "yw-native-candidates.json" and item.enabled
+               for item in dictionaries)
+    assert any(str(item.path) == str(experimental) and not item.enabled
+               for item in dictionaries)
 
 
 def test_mode_strokes_are_canonical_and_cannot_alias_one_physical_chord(
