@@ -21,10 +21,11 @@ Each candidate may contain:
   Tiger `code` or `codes` value. Runtime rules take precedence when loaded;
 - `weight`: optional numeric ordering weight.
 
-When a weight is present, candidates are ordered by descending weight. Equal
-weights keep their source order, so adding incomplete frequency data cannot
-silently reshuffle the rest of a dictionary. The packaged dictionary does not
-invent weights. To build a weighted dictionary, pass a separate UTF-8 TSV file
+Candidates with known weights are ordered by descending weight within the
+positions they already occupy. Candidates without a weight remain anchored in
+their source positions; they are not treated as frequency zero or pushed to
+the bottom. Equal weights keep their source order. The packaged dictionary
+does not invent weights. To build a weighted dictionary, pass a separate UTF-8 TSV file
 to the generator; each row is `word<TAB>count`:
 
 ```text

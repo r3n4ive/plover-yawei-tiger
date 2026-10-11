@@ -20,7 +20,7 @@ class CandidateItem:
 
     text: str
     char_codes: Tuple[str, ...] = ()
-    weight: float = 0.0
+    weight: Optional[float] = None
     order: int = 0
     tones: Tuple[int, ...] = ()
 
@@ -86,10 +86,12 @@ def _parse_item(raw: Any, order: int) -> CandidateItem:
     text = raw.get("text", raw.get("word", raw.get("value")))
     if text is None or not str(text):
         raise CandidateProtocolError("candidate item is missing text")
-    try:
-        weight = float(raw.get("weight", 0.0))
-    except (TypeError, ValueError) as exc:
-        raise CandidateProtocolError("candidate weight must be numeric") from exc
+    weight = None
+    if "weight" in raw:
+        try:
+            weight = float(raw["weight"])
+        except (TypeError, ValueError) as exc:
+            raise CandidateProtocolError("candidate weight must be numeric") from exc
     return CandidateItem(
         text=str(text),
         char_codes=_item_codes(raw, str(text)),
@@ -97,6 +99,22 @@ def _parse_item(raw: Any, order: int) -> CandidateItem:
         order=order,
         tones=_item_tones(raw),
     )
+
+
+def _sort_weighted_candidates(items: Sequence[CandidateItem]) -> List[CandidateItem]:
+    """Sort known weights in place-order slots, leaving unknown items anchored."""
+
+    result = list(items)
+    weighted_positions = [
+        position for position, item in enumerate(result) if item.weight is not None
+    ]
+    ranked = sorted(
+        (result[position] for position in weighted_positions),
+        key=lambda item: -item.weight,
+    )
+    for position, item in zip(weighted_positions, ranked):
+        result[position] = item
+    return result
 
 
 def parse_candidate_value(
@@ -127,7 +145,7 @@ def parse_candidate_value(
         raise CandidateProtocolError("candidate items must be a list")
 
     items = [_parse_item(item, order) for order, item in enumerate(raw_items)]
-    return sorted(items, key=lambda item: (-item.weight, item.order))
+    return _sort_weighted_candidates(items)
 
 
 def _outline_tuple(outline: Any) -> Tuple[str, ...]:
@@ -155,7 +173,7 @@ class CandidateIndex:
             if item.text not in seen:
                 bucket.append(item)
                 seen.add(item.text)
-        bucket.sort(key=lambda item: (-item.weight, item.order))
+        bucket[:] = _sort_weighted_candidates(bucket)
         for length in range(1, len(key) + 1):
             prefix = key[:length]
             self.prefixes.add(prefix)

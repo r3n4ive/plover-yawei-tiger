@@ -15,23 +15,41 @@ def marked(payload, marker="=PLOVER-CAND:"):
     return marker + json.dumps(payload, ensure_ascii=False)
 
 
-def test_parser_supports_configurable_marker_metadata_and_stable_weight_order():
+def test_parser_sorts_known_weights_without_moving_unknown_candidates():
     parsed = parse_candidate_value(marked({
         "items": [
             {"text": "甲乙", "chars": [{"code": "TZ"}, {"codes": [" K ", "O"]}]},
             {"text": "甲丙", "aux": {"first": "TZ", "last": "KC"}, "weight": 4},
+            {"text": "甲戊", "weight": 9},
             {"text": "甲丁", "weight": 4},
+            {"text": "甲己"},
         ]
     }, marker="=TEST-CAND:"), marker="=TEST-CAND:")
 
     assert parsed == [
+        CandidateItem("甲乙", ("tz", "ko"), None, 0),
+        CandidateItem("甲戊", (), 9.0, 2),
         CandidateItem("甲丙", ("tz", "kc"), 4.0, 1),
-        CandidateItem("甲丁", (), 4.0, 2),
-        CandidateItem("甲乙", ("tz", "ko"), 0.0, 0),
+        CandidateItem("甲丁", (), 4.0, 3),
+        CandidateItem("甲己", (), None, 4),
     ]
     assert parse_candidate_value("ordinary translation") is None
     assert parse_candidate_value("=TEST-CAND:[\"x\"]", marker="=TEST-CAND:") == [
         CandidateItem("x", order=0)
+    ]
+
+
+def test_index_keeps_unweighted_candidates_in_their_original_slots():
+    index = CandidateIndex()
+    index.add(("A",), [
+        CandidateItem("unknown-first"),
+        CandidateItem("known-low", weight=2, order=1),
+        CandidateItem("known-high", weight=9, order=2),
+        CandidateItem("unknown-last", order=3),
+    ])
+
+    assert [item.text for item in index.candidates_for(("A",))] == [
+        "unknown-first", "known-high", "known-low", "unknown-last",
     ]
 
 
