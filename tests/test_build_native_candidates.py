@@ -5,6 +5,7 @@ import pytest
 from plover_yawei_tiger.native_candidates import parse_candidate_value
 from plover_yawei_tiger.stroke_mapping import YaweiRimeEncoder
 from tools.build_native_candidates import collect_groups, load_word_frequencies
+from tools.extract_rime_frequencies import load_rime_frequencies, load_words_from_json
 
 
 def test_builder_folds_only_trailing_auxiliary_outlines(tmp_path):
@@ -67,6 +68,26 @@ def test_word_frequency_loader_accumulates_duplicate_rows_and_rejects_bad_rows(t
     bad.write_text("通晓\tnot-a-number\n", encoding="utf-8")
     with pytest.raises(ValueError, match="expected word<TAB>count"):
         load_word_frequencies(bad)
+
+
+def test_rime_frequency_extractor_filters_words_and_keeps_max_duplicate_reading(tmp_path):
+    source = tmp_path / "source.dict.yaml"
+    source.write_text(
+        "---\nname: test\n...\n"
+        "爸爸\tbaba\t10\n"
+        "爸爸\tbàba\t25\n"
+        "通晓\ttongxiao\t20\n"
+        "不相关\tbu\t99\n",
+        encoding="utf-8",
+    )
+    words = tmp_path / "words.json"
+    words.write_text(json.dumps({"A": "爸爸", "B": "通晓", "C": "plain"}), encoding="utf-8")
+
+    assert load_words_from_json(words) == {"爸爸", "通晓"}
+    assert load_rime_frequencies(source, {"爸爸", "通晓"}) == {
+        "爸爸": 25.0,
+        "通晓": 20.0,
+    }
 
 
 def test_packaged_candidate_dictionary_is_a_valid_plover_string_map():

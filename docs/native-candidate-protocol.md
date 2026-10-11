@@ -46,6 +46,33 @@ Without `--frequency-file`, the generator preserves the existing dictionary
 order. Longer pinyin outlines are never folded into a shorter outline merely
 because their text starts with the same characters.
 
+## Wanxiang frequency experiment
+
+The repository does not vendor a third-party frequency database. If a local
+checkout of [rime_wanxiang](https://github.com/amzxyz/rime_wanxiang) is
+available, extract only the words already present in the Yawei source
+dictionary:
+
+```text
+python tools/extract_rime_frequencies.py \
+  path/to/wanxiang/dicts/jichu.dict.yaml \
+  --words-from plover_yawei_tiger/dictionaries/base.json \
+  --output build/wanxiang-jichu-base.tsv
+python tools/build_native_candidates.py \
+  --frequency-file build/wanxiang-jichu-base.tsv \
+  --output build/yw-native-candidates-wanxiang.json
+```
+
+The extractor uses the largest weight when a word occurs under multiple
+readings, so alternate pronunciations do not double-count a word. The
+experimental result is a regular Plover JSON dictionary and can be copied to
+the Plover user dictionary directory for manual comparison; the packaged
+`yw-native-candidates.json` remains the deterministic source-order version
+until a frequency source and license are deliberately selected for release.
+The local Wanxiang checkout used during development was revision
+`908108a09121aaf7ba2cad1fcfbe71b427ea9090` and is licensed CC BY 4.0; any
+redistribution of derived frequency data must retain its attribution.
+
 For hand-written entries, a list of strings is accepted:
 
 ```json
