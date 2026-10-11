@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 from pathlib import Path
 import sys
-from typing import Dict, Iterable, List, Tuple
+from typing import Dict, Iterable, List, Mapping, Optional, Tuple
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -41,10 +42,46 @@ def char_metadata(text: str, tiger: Dict[str, str]) -> List[dict]:
     return [{"code": tiger.get(char, "")} for char in text]
 
 
-def collect_groups(paths: Iterable[Path], encoder: YaweiRimeEncoder, tiger: Dict[str, str]):
+def load_word_frequencies(path: Path) -> Dict[str, float]:
+    """Load a UTF-8 TSV frequency list in ``word<TAB>count`` format."""
+
+    result: Dict[str, float] = {}
+    for line_number, raw in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        try:
+            word, raw_count = line.rsplit("\t", 1)
+            count = float(raw_count)
+        except (ValueError, TypeError) as exc:
+            raise ValueError(
+                "invalid word frequency at %s:%d; expected word<TAB>count"
+                % (path, line_number)
+            ) from exc
+        word = word.strip()
+        if not word or not math.isfinite(count) or count < 0:
+            raise ValueError("invalid word frequency at %s:%d" % (path, line_number))
+        result[word] = result.get(word, 0.0) + count
+    return result
+
+
+def _candidate_item(text: str, tiger: Dict[str, str], frequencies: Mapping[str, float]):
+    item = {"text": text, "chars": char_metadata(text, tiger)}
+    if text in frequencies:
+        item["weight"] = frequencies[text]
+    return item
+
+
+def collect_groups(
+    paths: Iterable[Path],
+    encoder: YaweiRimeEncoder,
+    tiger: Dict[str, str],
+    word_frequencies: Optional[Mapping[str, float]] = None,
+):
     claimed_outlines = set()
     direct: Dict[Tuple[str, ...], dict] = {}
     suffixed: Dict[Tuple[str, ...], List[dict]] = {}
+    frequencies = word_frequencies or {}
 
     for path in paths:
         dictionary = json.loads(path.read_text(encoding="utf-8"))
@@ -64,18 +101,14 @@ def collect_groups(paths: Iterable[Path], encoder: YaweiRimeEncoder, tiger: Dict
                 if first_aux == 0 or any(kind != "auxiliary" for kind in kinds[first_aux:]):
                     continue
                 prefix = key[:first_aux]
-                suffixed.setdefault(prefix, []).append({
-                    "text": value,
-                    "chars": char_metadata(value, tiger),
-                })
+                suffixed.setdefault(prefix, []).append(
+                    _candidate_item(value, tiger, frequencies)
+                )
             else:
                 # Only use outlines that the active Yawei pinyin map can encode.
                 if not all(encoder.encode_stroke(stroke) for stroke in key):
                     continue
-                direct.setdefault(key, {
-                    "text": value,
-                    "chars": char_metadata(value, tiger),
-                })
+                direct.setdefault(key, _candidate_item(value, tiger, frequencies))
 
     result = {}
     for prefix, alternatives in suffixed.items():
@@ -104,6 +137,11 @@ def main() -> int:
     parser.add_argument("--auxiliary-map", type=Path,
                         default=ROOT / "plover_yawei_tiger" / "theory_map" / "fu_to_virtual_keys.txt")
     parser.add_argument("--tiger-map", type=Path, default=ROOT / "tools" / "theory_map" / "tiger2.txt")
+    parser.add_argument(
+        "--frequency-file",
+        type=Path,
+        help="optional UTF-8 TSV with word<TAB>count rows; counts become candidate weights",
+    )
     parser.add_argument("sources", nargs="*", help="Plover JSON dictionaries; defaults to base.json")
     args = parser.parse_args()
 
@@ -114,7 +152,13 @@ def main() -> int:
         parser.error("missing dictionary: %s" % missing[0])
 
     encoder = YaweiRimeEncoder(load_map(args.pinyin_map), load_map(args.auxiliary_map))
-    rows = collect_groups(source_paths, encoder, load_tiger(args.tiger_map))
+    frequencies = load_word_frequencies(args.frequency_file) if args.frequency_file else None
+    rows = collect_groups(
+        source_paths,
+        encoder,
+        load_tiger(args.tiger_map),
+        word_frequencies=frequencies,
+    )
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(
         json.dumps(rows, ensure_ascii=False, separators=(",", ":")) + "\n",

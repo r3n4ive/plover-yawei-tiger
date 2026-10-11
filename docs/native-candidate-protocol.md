@@ -21,6 +21,29 @@ Each candidate may contain:
   Tiger `code` or `codes` value. Runtime rules take precedence when loaded;
 - `weight`: optional numeric ordering weight.
 
+When a weight is present, candidates are ordered by descending weight. Equal
+weights keep their source order, so adding incomplete frequency data cannot
+silently reshuffle the rest of a dictionary. The packaged dictionary does not
+invent weights. To build a weighted dictionary, pass a separate UTF-8 TSV file
+to the generator; each row is `word<TAB>count`:
+
+```text
+通晓	120
+通宵	90
+同校	90
+```
+
+```text
+python tools/build_native_candidates.py --frequency-file path/to/word-frequency.tsv
+```
+
+The frequency file is deliberately optional. A single-character frequency
+table is not a reliable proxy for phrase frequency, so it must not be used to
+rank phrases unless its rows describe the actual candidate words or phrases.
+Without `--frequency-file`, the generator preserves the existing dictionary
+order. Longer pinyin outlines are never folded into a shorter outline merely
+because their text starts with the same characters.
+
 For hand-written entries, a list of strings is accepted:
 
 ```json
