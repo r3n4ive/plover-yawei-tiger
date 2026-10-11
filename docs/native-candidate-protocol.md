@@ -34,7 +34,9 @@ to the generator; each row is `word<TAB>count`:
 ```
 
 ```text
-python tools/build_native_candidates.py --frequency-file path/to/word-frequency.tsv
+python tools/build_native_candidates.py \
+  --frequency-file path/to/word-frequency.tsv \
+  --output path/to/yw-native-candidates-weighted.json
 ```
 
 The frequency file is deliberately optional. A single-character frequency
