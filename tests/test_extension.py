@@ -1,3 +1,4 @@
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -11,6 +12,7 @@ from plover_yawei_tiger.extension import (
     _configured_native_candidate_path,
     _candidate_dictionary_source,
     _native_candidate_dictionary_view,
+    _new_dictionary_config,
     _normalize_mode_stroke,
 )
 from plover_yawei_tiger.candidate import CandidateController
@@ -221,6 +223,15 @@ def test_experimental_candidate_table_is_injected_and_formal_disabled(
                for item in dictionaries)
     assert any(str(item.path) == str(experimental) and not item.enabled
                for item in dictionaries)
+
+
+def test_experimental_dictionary_uses_plover5_dictionary_config(tmp_path):
+    experimental = tmp_path / "yw-native-candidates-runtime.json"
+
+    dictionary = _new_dictionary_config(experimental)
+
+    assert Path(dictionary.path).resolve() == experimental.resolve()
+    assert dictionary.enabled is True
 
 
 def test_startup_log_identifies_active_experimental_table_and_weighted_groups(
