@@ -21,6 +21,7 @@ Each candidate may contain:
   Tiger `code` or `codes` value. Runtime rules take precedence when loaded;
 - `weight`: optional numeric ordering weight.
 
+Weights are meaningful only for an outline that has multiple candidates.
 Candidates with known weights are ordered by descending weight within the
 positions they already occupy. Candidates without a weight remain anchored in
 their source positions; they are not treated as frequency zero or pushed to
@@ -40,7 +41,9 @@ python tools/build_native_candidates.py \
   --output path/to/yw-native-candidates-weighted.json
 ```
 
-The frequency file is deliberately optional. A single-character frequency
+The frequency file is deliberately optional. Unique outline-to-word entries
+do not need a weight and are not materialized as weighted candidate rows. A
+single-character frequency
 table is not a reliable proxy for phrase frequency, so it must not be used to
 rank phrases unless its rows describe the actual candidate words or phrases.
 Without `--frequency-file`, the generator preserves the existing dictionary

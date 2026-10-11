@@ -264,7 +264,7 @@ python tools/rime/sync_dictionary.py
 
 ## 已知限制和后续计划
 
-1. 候选排序已经支持可选的实际词/短语词频，但加权词库仍是实验构建，不直接覆盖默认发布词库。生成器支持 `--frequency-file`（`词语<TAB>次数`），并提供脚本把万象 `jichu.dict.yaml` 提取成只覆盖本项目词库的频率表；同权重保持原顺序，缺少权重的词也不会被猜测排序。`tools/compare_candidate_frequency.py` 可生成中文对比报告，展示覆盖率、首选变化及具体编码的前后顺序，候选增删与仅排序变化分开统计。详见 [原生候选协议](docs/native-candidate-protocol.md#review-before-activation)。
+1. 候选排序已经支持可选的实际词/短语词频，但加权词库仍是实验构建，不直接覆盖默认发布词库。词频只用于多候选编码；唯一映射不需要词频。生成器支持 `--frequency-file`（`词语<TAB>次数`），并提供脚本把万象 `jichu.dict.yaml` 提取成只覆盖本项目词库的频率表；同权重保持原顺序，缺少权重的词也不会被猜测排序。`tools/compare_candidate_frequency.py` 可生成中文对比报告，展示覆盖率、首选变化及具体编码的前后顺序，候选增删与仅排序变化分开统计。详见 [原生候选协议](docs/native-candidate-protocol.md#review-before-activation)。
 2. 自动绑定/强制解绑键位仍是开发阶段绑定，最终 chord 需要和英文 Lapwing、符号表及编辑功能统一检查。
 3. Rime 整句和本地 LLM 重排是可选实验，不替换默认的确定性 native 路线。
 4. `plover-multi-candidate` 已有独立打包项目，但尚未作为单独插件正式发布。

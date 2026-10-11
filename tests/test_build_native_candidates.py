@@ -59,6 +59,18 @@ def test_builder_can_attach_optional_word_frequency_weights(tmp_path):
     assert "BA-BA" not in result
 
 
+def test_builder_does_not_materialize_frequency_for_unique_outline(tmp_path):
+    source = tmp_path / "source.json"
+    source.write_text(json.dumps({"BA-BA": "爸爸"}, ensure_ascii=False), encoding="utf-8")
+    encoder = YaweiRimeEncoder({"BA": "ba"}, {})
+
+    result = collect_groups(
+        [source], encoder, {"爸": "hm"}, word_frequencies={"爸爸": 99999}
+    )
+
+    assert result == {}
+
+
 def test_word_frequency_loader_accumulates_duplicate_rows_and_rejects_bad_rows(tmp_path):
     path = tmp_path / "freq.tsv"
     path.write_text("通晓\t2\n通晓\t3\n同校\t0\n# comment\n", encoding="utf-8")
