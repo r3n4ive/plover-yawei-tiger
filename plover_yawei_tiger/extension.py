@@ -137,7 +137,8 @@ def _load_candidate_window_config(package_root: Path):
         for key in (
             "font_family", "buffer_font_size", "preedit_font_size",
             "candidate_font_size", "width", "height", "max_candidates",
-            "background", "foreground", "accent",
+            "background", "foreground", "accent", "position_mode",
+            "fixed_position", "margin",
         ):
             if key in section:
                 values[key] = section.get(key)

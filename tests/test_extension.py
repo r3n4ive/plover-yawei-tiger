@@ -103,7 +103,8 @@ def test_candidate_window_settings_are_loaded_from_user_cfg(tmp_path, monkeypatc
     config = tmp_path / "yawei_tiger.cfg"
     config.write_text(
         "[candidate_window]\nfont_family = Microsoft YaHei\n"
-        "width = 480\nmax_candidates = 6\n",
+        "width = 480\nmax_candidates = 6\n"
+        "position_mode = fixed\nfixed_position = top-right\nmargin = 20\n",
         encoding="utf-8",
     )
     monkeypatch.setenv("PLOVER_YAWEI_COMMAND_CONFIG", str(config))
@@ -112,6 +113,9 @@ def test_candidate_window_settings_are_loaded_from_user_cfg(tmp_path, monkeypatc
     assert values["width"] == 480
     assert values["max_candidates"] == 6
     assert values["height"] == 180
+    assert values["position_mode"] == "fixed"
+    assert values["fixed_position"] == "top_right"
+    assert values["margin"] == 20
 
 
 def test_mode_strokes_are_canonical_and_cannot_alias_one_physical_chord(

@@ -171,3 +171,54 @@ def test_rendered_popup_has_background_and_matching_text_insets(popup, app):
     first = window._candidate_labels[0]
     assert first.indent() == window._buffered.indent() == 0
     assert first.contentsRect().x() == window._buffered.contentsRect().x()
+
+
+@pytest.mark.parametrize("anchor", [
+    "top_left", "top_center", "top_right",
+    "middle_left", "middle_right",
+    "bottom_left", "bottom_center", "bottom_right",
+])
+def test_fixed_position_supports_all_eight_screen_anchors(popup, app, anchor):
+    window = popup({
+        "position_mode": "fixed",
+        "fixed_position": anchor,
+        "margin": 20,
+        "width": 360,
+    })
+    window.set_state(CandidateState(buffered="爸爸", candidates=["爸爸", "粑粑"]))
+    window.show_candidate_window()
+    app.processEvents()
+    screen = app.screenAt(window.pos()) or app.primaryScreen()
+    geometry = screen.availableGeometry()
+    position = window.pos()
+    if anchor.endswith("left"):
+        assert position.x() == geometry.left() + 20
+    elif anchor.endswith("right"):
+        assert position.x() == geometry.right() - window.width() - 20 + 1
+    else:
+        assert position.x() == geometry.left() + (geometry.width() - window.width()) // 2
+    if anchor.startswith("top"):
+        assert position.y() == geometry.top() + 20
+    elif anchor.startswith("bottom"):
+        assert position.y() == geometry.bottom() - window.height() - 20 + 1
+    else:
+        assert position.y() == geometry.top() + (geometry.height() - window.height()) // 2
+
+
+def test_follow_position_uses_active_caret(popup, app, monkeypatch):
+    screen = app.primaryScreen()
+    geometry = screen.availableGeometry()
+    caret = (
+        geometry.left() + 40,
+        geometry.top() + 40,
+        geometry.left() + 42,
+        geometry.top() + 60,
+    )
+    monkeypatch.setattr(ui, "_windows_caret_rect", lambda: caret)
+    window = popup({"position_mode": "follow", "margin": 10, "width": 360})
+    window.set_state(CandidateState(buffered="爸爸", candidates=["爸爸", "粑粑"]))
+    window.show_candidate_window()
+    app.processEvents()
+    assert window.x() == geometry.left() + 40
+    assert window.y() == geometry.top() + 70
+    assert geometry.contains(window.geometry())

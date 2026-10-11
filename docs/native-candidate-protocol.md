@@ -127,11 +127,22 @@ max_candidates = 9
 background = #202124
 foreground = #f8f9fa
 accent = #355070
+position_mode = follow
+fixed_position = bottom_left
+margin = 12
 ```
 
 This section only changes presentation. Candidate ordering, selection keys,
 line buffering, and Chinese spacing remain controlled by the backend and the
 Yawei theory configuration.
+
+`position_mode = follow` places the popup near the active text caret on Windows
+(`QCursor` is used as a fallback when the caret cannot be read). Set
+`position_mode = fixed` to pin it to one of eight work-area anchors:
+`top_left`, `top_center`, `top_right`, `middle_left`, `middle_right`,
+`bottom_left`, `bottom_center`, or `bottom_right`. `fixed_position` is used
+only in fixed mode, and `margin` is the distance from the screen work-area
+edge in pixels.
 
 The buffer occupies its own row. The candidate chips form a left-aligned strip
 with fixed gaps; unused width stays to their right, even with only two items.

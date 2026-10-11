@@ -127,6 +127,25 @@ Rime 后端默认不启用；相关运行时和生成文件只在显式选择该
 刷新时旧标签会立即隐藏，窗口高度根据当前字体和两行内容重新计算，因此不会出现“爸爸”正常、
 “的话”两行错位或候选文字上下被裁切的问题。窗口宽度是最小宽度，不会把少量候选强行分散到整行。
 
+候选窗位置可以在用户配置的 `[candidate_window]` 中设置：
+
+```ini
+position_mode = follow
+fixed_position = bottom_left
+margin = 12
+```
+
+`position_mode = follow` 会让窗口跟随当前输入光标；Windows 读取不到系统插入光标时，
+会回退到鼠标位置。也可以使用 `position_mode = fixed` 固定到屏幕工作区的八个位置：
+`top_left`、`top_center`、`top_right`、`middle_left`、`middle_right`、
+`bottom_left`、`bottom_center`、`bottom_right`。例如：
+
+```ini
+position_mode = fixed
+fixed_position = top_right
+margin = 20
+```
+
 候选选择使用亚伟左手
 `XNE` 前缀，右手采用 Lapwing 的九键数字布局，落在亚伟右手较自然的 `W/U/E`、
 `G/I/N` 三列；最内侧的 `D/Z` 列不参与选重：

@@ -19,7 +19,33 @@ DEFAULT_WINDOW_CONFIG = {
     "background": "#202124",
     "foreground": "#f8f9fa",
     "accent": "#355070",
+    "position_mode": "follow",
+    "fixed_position": "bottom_left",
+    "margin": 12,
 }
+
+WINDOW_POSITIONS = (
+    "top_left", "top_center", "top_right",
+    "middle_left", "middle_right",
+    "bottom_left", "bottom_center", "bottom_right",
+)
+
+_POSITION_ALIASES = {
+    "top-left": "top_left", "topleft": "top_left",
+    "top-center": "top_center", "topcenter": "top_center",
+    "top-right": "top_right", "topright": "top_right",
+    "middle-left": "middle_left", "middleleft": "middle_left",
+    "middle-right": "middle_right", "middleright": "middle_right",
+    "bottom-left": "bottom_left", "bottomleft": "bottom_left",
+    "bottom-center": "bottom_center", "bottomcenter": "bottom_center",
+    "bottom-right": "bottom_right", "bottomright": "bottom_right",
+}
+
+
+def _normalize_position(value, default="bottom_left"):
+    value = str(value or "").strip().lower().replace(" ", "_")
+    value = _POSITION_ALIASES.get(value, value)
+    return value if value in WINDOW_POSITIONS else default
 
 
 def normalize_window_config(values: Optional[Mapping[str, object]] = None):
@@ -30,13 +56,15 @@ def normalize_window_config(values: Optional[Mapping[str, object]] = None):
     """
 
     result = dict(DEFAULT_WINDOW_CONFIG)
-    for key in ("font_family", "background", "foreground", "accent"):
+    for key in (
+        "font_family", "background", "foreground", "accent", "position_mode",
+    ):
         value = (values or {}).get(key)
         if value is not None and str(value).strip():
             result[key] = str(value).strip()
     for key in (
         "buffer_font_size", "preedit_font_size", "candidate_font_size",
-        "width", "height", "max_candidates",
+        "width", "height", "max_candidates", "margin",
     ):
         value = (values or {}).get(key)
         if value is None:
@@ -48,6 +76,12 @@ def normalize_window_config(values: Optional[Mapping[str, object]] = None):
         minimum = 1 if key.endswith("font_size") else 1
         if value >= minimum:
             result[key] = value
+    mode = str(result.get("position_mode", "follow")).strip().lower()
+    result["position_mode"] = mode if mode in {"follow", "fixed"} else "follow"
+    result["fixed_position"] = _normalize_position(
+        (values or {}).get("fixed_position", (values or {}).get("anchor")),
+        result["fixed_position"],
+    )
     return result
 
 
@@ -126,22 +160,23 @@ class CandidateController:
 
 
 try:  # pragma: no cover - import availability depends on the host runtime
-    from PySide6.QtCore import QObject, QThread, Qt, Signal, Slot
-    from PySide6.QtGui import QFont, QPainter
+    from PySide6.QtCore import QObject, QThread, Qt, Signal, Slot, QPoint
+    from PySide6.QtGui import QCursor, QFont, QGuiApplication, QPainter
     from PySide6.QtWidgets import (
         QFrame, QHBoxLayout, QLabel, QVBoxLayout, QWidget, QSizePolicy,
         QStyle, QStyleOption,
     )
 except ImportError:  # pragma: no cover
     try:
-        from PyQt5.QtCore import QObject, QThread, Qt, pyqtSignal as Signal, pyqtSlot as Slot
-        from PyQt5.QtGui import QFont, QPainter
+        from PyQt5.QtCore import QObject, QThread, Qt, pyqtSignal as Signal, pyqtSlot as Slot, QPoint
+        from PyQt5.QtGui import QCursor, QFont, QGuiApplication, QPainter
         from PyQt5.QtWidgets import (
             QFrame, QHBoxLayout, QLabel, QVBoxLayout, QWidget, QSizePolicy,
             QStyle, QStyleOption,
         )
     except ImportError:
-        QObject = QThread = Signal = Slot = Qt = QFont = None
+        QObject = QThread = Signal = Slot = Qt = QPoint = QCursor = QFont = None
+        QGuiApplication = None
         QFrame = QHBoxLayout = QLabel = QVBoxLayout = QWidget = QSizePolicy = None
         QPainter = QStyle = QStyleOption = None
 
@@ -178,6 +213,49 @@ if QObject is not None:
                 self.controller.window.hide()
                 self.controller.window.deleteLater()
                 self.controller.window = None
+
+
+def _windows_caret_rect():
+    """Return the foreground caret rect in screen coordinates when available."""
+
+    if __import__("os").name != "nt":
+        return None
+    try:
+        import ctypes
+        from ctypes import wintypes
+
+        class Rect(ctypes.Structure):
+            _fields_ = [
+                ("left", wintypes.LONG), ("top", wintypes.LONG),
+                ("right", wintypes.LONG), ("bottom", wintypes.LONG),
+            ]
+
+        class Point(ctypes.Structure):
+            _fields_ = [("x", wintypes.LONG), ("y", wintypes.LONG)]
+
+        class GuiThreadInfo(ctypes.Structure):
+            _fields_ = [
+                ("cbSize", wintypes.DWORD), ("flags", wintypes.DWORD),
+                ("hwndActive", wintypes.HWND), ("hwndFocus", wintypes.HWND),
+                ("hwndCapture", wintypes.HWND), ("hwndMenuOwner", wintypes.HWND),
+                ("hwndMoveSize", wintypes.HWND), ("hwndCaret", wintypes.HWND),
+                ("rcCaret", Rect),
+            ]
+
+        user32 = ctypes.windll.user32
+        info = GuiThreadInfo()
+        info.cbSize = ctypes.sizeof(GuiThreadInfo)
+        if not user32.GetGUIThreadInfo(0, ctypes.byref(info)) or not info.hwndCaret:
+            return None
+        top = Point(info.rcCaret.left, info.rcCaret.top)
+        bottom = Point(info.rcCaret.left, info.rcCaret.bottom)
+        if not user32.ClientToScreen(info.hwndCaret, ctypes.byref(top)):
+            return None
+        if not user32.ClientToScreen(info.hwndCaret, ctypes.byref(bottom)):
+            return None
+        return top.x, top.y, bottom.x, bottom.y
+    except (AttributeError, OSError, TypeError, ValueError):
+        return None
 
 
 if QFrame is not None:
@@ -329,6 +407,74 @@ if QFrame is not None:
             self.resize(max(self.config["width"], desired.width()), desired.height())
             self.layout().activate()
 
+        def _screen_for_point(self, point):
+            app = QGuiApplication.instance()
+            if app is None:
+                return None
+            screen_at = getattr(app, "screenAt", None)
+            screen = screen_at(point) if screen_at is not None else None
+            return screen or app.primaryScreen()
+
+        def _clamped_position(self, x, y, screen):
+            geometry = screen.availableGeometry()
+            margin = self.config["margin"]
+            max_x = max(geometry.left() + margin, geometry.right() - self.width() - margin + 1)
+            max_y = max(geometry.top() + margin, geometry.bottom() - self.height() - margin + 1)
+            return QPoint(
+                min(max(x, geometry.left() + margin), max_x),
+                min(max(y, geometry.top() + margin), max_y),
+            )
+
+        def _fixed_position(self, screen):
+            geometry = screen.availableGeometry()
+            margin = self.config["margin"]
+            horizontal = self.config["fixed_position"].split("_", 1)[1]
+            vertical = self.config["fixed_position"].split("_", 1)[0]
+            if horizontal == "left":
+                x = geometry.left() + margin
+            elif horizontal == "center":
+                x = geometry.left() + (geometry.width() - self.width()) // 2
+            else:
+                x = geometry.right() - self.width() - margin + 1
+            if vertical == "top":
+                y = geometry.top() + margin
+            elif vertical == "middle":
+                y = geometry.top() + (geometry.height() - self.height()) // 2
+            else:
+                y = geometry.bottom() - self.height() - margin + 1
+            return self._clamped_position(x, y, screen)
+
+        def _follow_position(self):
+            caret = _windows_caret_rect()
+            if caret is not None:
+                anchor = QPoint(caret[0], caret[1])
+                screen = self._screen_for_point(anchor)
+                x = caret[0]
+                y = caret[3] + self.config["margin"]
+                # Prefer below the caret, but move above it when the popup
+                # would cross the work-area bottom edge.
+                geometry = screen.availableGeometry()
+                if y + self.height() > geometry.bottom() + 1:
+                    y = caret[1] - self.height() - self.config["margin"]
+                return self._clamped_position(x, y, screen)
+            cursor = QCursor.pos()
+            screen = self._screen_for_point(cursor)
+            return self._clamped_position(
+                cursor.x() + self.config["margin"],
+                cursor.y() + self.config["margin"],
+                screen,
+            )
+
+        def _position_window(self):
+            app = QGuiApplication.instance()
+            if app is None:
+                return
+            if self.config["position_mode"] == "fixed":
+                screen = self._screen_for_point(QCursor.pos())
+                self.move(self._fixed_position(screen))
+            else:
+                self.move(self._follow_position())
+
         def paintEvent(self, event):
             # A translucent Python QWidget subclass needs an explicit styled
             # background paint; otherwise only the labels/chips are opaque.
@@ -339,6 +485,7 @@ if QFrame is not None:
             painter.end()
 
         def show_candidate_window(self):
+            self._position_window()
             self.show()
             self.raise_()
 
