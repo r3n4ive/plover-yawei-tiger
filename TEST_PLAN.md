@@ -651,6 +651,7 @@ tiger2.txt
 | --- | --- |
 | machine/HID 解码 | `tests/test_machine.py` |
 | extension 路由和模式 | `tests/test_extension.py`、`tests/test_routing.py` |
+| Plover 5 完整启动、实验词库切换和恢复 | `tests/test_plover_startup.py` |
 | native 候选、辅码、顶屏、undo | `tests/test_native_candidates.py` |
 | 候选窗口控制器 | `tests/test_candidate.py` |
 | Qt 实际布局、字体、候选增减、单/双行切换与背景绘制 | `tests/test_candidate_window.py` |
@@ -668,3 +669,39 @@ tiger2.txt
 ```
 
 自动测试通过不能替代第 2、3、7、9 节的真实设备、真实窗口和真实目标应用测试。
+
+## 12. 可选词频词库验收
+
+本节只测试多候选排序，仍走 native JSON，不启用 Rime。正式词库保留原始顺序。
+
+### 12.1 启用和重启
+
+将生成的 `yw-native-candidates-wanxiang.json` 放到用户词典目录，在用户
+`yawei_tiger.cfg` 添加：
+
+```ini
+[native_candidates]
+path = yw-native-candidates-wanxiang.json
+```
+
+完全退出后重新启动 Plover。日志中最终的 `candidate_table` 应指向该文件；
+当前实验表的 `weighted_multi_candidate_groups` 是 `35972`。扩展只启动一次，
+不能有 `initializing extension` 错误或候选协议字符串漏到目标程序。
+
+### 12.2 最小人工测试
+
+在空白记事本文档中按 `IUNE-IU` 进入中文模式，用 `XU-DZ` 确认行缓冲模式。
+
+1. 按 `A-BA`：候选前三项应是“阿爸、阿坝、阿巴”，缓冲首选是“阿爸”。
+   原始词库的前三项是“阿巴、阿爸、阿坝”，这个用例可以判断词频表是否生效。
+2. 按 `XNE-U` 选第二项：缓冲变成“阿坝”，记事本还没有文字。
+3. 按 `XNA-G` 提交：记事本得到“阿坝”，缓冲和候选清空。
+
+可选检查：`BA-BA` 首选仍是“爸爸”；`BDUEO-XIAO` 前三项仍是“通宵、通晓、同校”。
+这两个编码的排序没有变化，单独用它们不能证明实验词库已启用。
+
+### 12.3 恢复默认
+
+清空 `[native_candidates]` 的 `path` 后完全退出并重新启动 Plover。
+`A-BA` 应恢复“阿巴、阿爸、阿坝”；正式候选词典重新启用，实验表禁用。
+其他词典、行缓冲模式、符号和编辑键继续保持原配置。

@@ -749,6 +749,8 @@ class YaweiRimeExtension:
         self._auto_backend_attempted = False
         self._backend_explicit = False
         self._selected_backend_mode = None
+        self._started = False
+        self._native_candidate_source = None
 
     @property
     def chinese_mode(self):
@@ -927,6 +929,7 @@ class YaweiRimeExtension:
             dictionaries = list(config["dictionaries"])
         except (KeyError, TypeError, AttributeError):
             return
+        original_dictionaries = list(dictionaries)
 
         def dictionary_paths(dictionary):
             return (
@@ -1007,6 +1010,8 @@ class YaweiRimeExtension:
                 dictionary = _replace_dictionary_enabled(dictionary, desired)
             changed.append(dictionary)
         dictionaries = changed
+        if dictionaries == original_dictionaries:
+            return
         try:
             self.engine.config = {"dictionaries": dictionaries}
         except (AttributeError, TypeError, KeyError):
@@ -1101,16 +1106,38 @@ class YaweiRimeExtension:
         except Exception:
             log.debug("unable to commit pending Chinese candidate", exc_info=True)
 
+    def _ensure_startup_dictionaries(self):
+        if not self._started:
+            return
+        self._ensure_mode_dictionaries()
+        self._ensure_native_candidate_dictionary()
+        # Plover may reuse dictionary objects when only enabled flags change;
+        # _set_dictionaries then emits no notification because identities are
+        # unchanged. Reconcile after both config updates so clearing a table
+        # setting also restores a backend that was transparent during start.
+        self._dictionaries_loaded(self.engine.dictionaries)
+
     def start(self):
+        self._started = True
         self._classifier.refresh(self.engine.dictionaries)
         self.engine.hook_connect("dictionaries_loaded", self._dictionaries_loaded)
         self._install_candidate_dictionary_filter()
-        self._ensure_mode_dictionaries()
-        self._ensure_native_candidate_dictionary()
+        queue = getattr(self.engine, "_queue", None)
+        running = getattr(self.engine, "_running_extensions", None)
+        if queue is not None and running is not None and running.get(self.NAME) is not self:
+            # Plover records the extension only after start() returns. Its
+            # config setter immediately runs _update() on the engine thread,
+            # which would start this extension again. Use the existing engine
+            # queue so dictionary changes happen after registration; resolve
+            # both changes together to preserve freshly added mode markers.
+            queue.put((self._ensure_startup_dictionaries, (), {}))
+        else:
+            self._ensure_startup_dictionaries()
         self._configure_default_backend()
         self._unregister = install_pre_translate_hook(self.engine, self._before_translate)
 
     def stop(self):
+        self._started = False
         if self._unregister is not None:
             self._unregister()
             self._unregister = None
@@ -1124,6 +1151,7 @@ class YaweiRimeExtension:
             self.backend = Backend()
             self._auto_backend_attempted = False
             self._selected_backend_mode = None
+            self._native_candidate_source = None
 
     def _install_candidate_dictionary_filter(self):
         """Keep the internal candidate protocol out of normal Plover output.
@@ -1229,31 +1257,32 @@ class YaweiRimeExtension:
             log.warning("Unable to configure native Yawei candidate backend", exc_info=True)
             native = None
         if native is not None:
-            candidate_source = _candidate_dictionary_source(
-                self.engine.dictionaries, package_root
-            )
-            weighted_groups = sum(
-                1 for items in native.index.exact.values()
-                if len(items) > 1 and any(item.weight is not None for item in items)
-            )
-            log.info(
-                "using native Plover candidate backend (%d outlines; "
-                "line_buffer=%s; commit_on_prefix_miss=%s; "
-                "flush_before_plover_command=%s; candidate_table=%s; "
-                "weighted_multi_candidate_groups=%d)",
-                len(native.index.exact),
-                native.line_buffer_enabled,
-                native.commit_on_prefix_miss,
-                native.flush_before_plover_command,
-                candidate_source,
-                weighted_groups,
-            )
             self.set_backend(native)
             self._backend_explicit = False
+            self._log_native_candidate_backend(self.engine.dictionaries)
             if getattr(native, "supports_candidate_ui", True):
                 self.enable_candidate_window()
             return
         log.info("native candidate dictionary unavailable; leaving Yawei extension transparent")
+
+    def _log_native_candidate_backend(self, dictionaries):
+        native = self.backend
+        package_root = Path(__file__).resolve().parent
+        candidate_source = _candidate_dictionary_source(dictionaries, package_root)
+        self._native_candidate_source = candidate_source
+        weighted_groups = sum(
+            1 for items in native.index.exact.values()
+            if len(items) > 1 and any(item.weight is not None for item in items)
+        )
+        log.info(
+            "using native Plover candidate backend (%d outlines; "
+            "line_buffer=%s; commit_on_prefix_miss=%s; "
+            "flush_before_plover_command=%s; candidate_table=%s; "
+            "weighted_multi_candidate_groups=%d)",
+            len(native.index.exact), native.line_buffer_enabled,
+            native.commit_on_prefix_miss, native.flush_before_plover_command,
+            candidate_source, weighted_groups,
+        )
 
     def _dictionaries_loaded(self, dictionaries):
         self._classifier.refresh(dictionaries)
@@ -1262,6 +1291,10 @@ class YaweiRimeExtension:
         refresh = getattr(self.backend, "refresh_dictionaries", None)
         if refresh is not None and active_mode in {None, self._selected_backend_mode}:
             refresh(_native_candidate_dictionary_view(dictionaries, package_root))
+            if (isinstance(self.backend, NativeCandidateBackend)
+                    and _candidate_dictionary_source(dictionaries, package_root)
+                    != self._native_candidate_source):
+                self._log_native_candidate_backend(dictionaries)
         # plover-dict-commands emits this hook after TOGGLE_DICT changes the
         # marker dictionaries. Rebuild the backend so a mode chord changes
         # buffering/output policy without changing the ordinary dictionary

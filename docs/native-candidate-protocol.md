@@ -98,6 +98,19 @@ the three backend-mode marker dictionaries are unchanged.  Remove the option
 packaged table.  A missing or non-file path is ignored with a warning and also
 falls back to the packaged table.
 
+Plover 5 applies configuration updates synchronously on its engine thread.
+Startup dictionary registration is therefore queued until the extension has
+finished registering, to avoid starting it recursively. After switching the
+enabled table, the extension also refreshes its candidate index when Plover
+reuses dictionary objects without emitting `dictionaries_loaded`. The log
+records the final active table and its weighted multi-candidate group count.
+
+`tests/test_plover_startup.py` runs the real Plover engine lifecycle, config
+setter and JSON loader with passive device/output adapters. It covers both
+native modes, numeric selection and commit, restoration after clearing the
+path or selecting a missing file, and cancellation of pending setup on stop.
+It does not replace physical keyboard or visible candidate-window testing.
+
 ### Review before activation
 
 Generate a comparison report using the same parser and ranking rules as the
