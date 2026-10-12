@@ -656,6 +656,7 @@ tiger2.txt
 | native 候选、辅码、顶屏、undo | `tests/test_native_candidates.py` |
 | 候选窗口控制器 | `tests/test_candidate.py` |
 | Qt 实际布局、字体、候选增减、单/双行切换与背景绘制 | `tests/test_candidate_window.py` |
+| 候选窗设置面板、实时应用和用户配置备份 | `tests/test_candidate_window.py`、`tests/test_window_settings.py` |
 | Rime backend、连续音节、无空格 commit | `tests/test_rime_backend.py`、`tests/test_factory.py` |
 | 外挂拼音输出、模式选择 | `tests/test_pinyin_backend.py`、`tests/test_extension.py`、`tests/test_factory.py` |
 | runtime 下载/隔离编译 | `tests/test_librime_runtime.py` |
@@ -727,3 +728,28 @@ path = yw-native-candidates-wanxiang.json
 
 2026-10-12：全套自动测试 237 项通过，独立 wheel 构建通过。真实设备验收结果
 仍以各人工章节为准；本节不表示新增硬件支持或已经发布到 PyPI。
+
+## 14. 候选窗图形设置
+
+首次安装新菜单入口后，完全退出并重新打开 Plover。后续调整外观不需要再重启。
+
+最小人工测试：
+
+1. 打开 Plover 的 **工具 → 亚伟候选窗设置**。把“候选字号”调大，确认下方预览随之变大。
+2. 选择“固定在屏幕位置”，固定位置选“右下”，点击“保存并应用”，然后关闭设置面板。
+3. 在记事本按 `IUNE-IU` 进入中文、`XU-DZ` 进入行缓冲，再按 `BA-BA`。
+   候选窗应在屏幕右下，字号为刚才设置值；缓冲仍显示“爸爸”，记事本没有提前收到文字。
+4. 按 `XNA-G` 提交，只输出一次“爸爸”。
+
+可选检查：把位置方式改回“跟随输入光标”并保存，再打 `BA-BA`，应跟随输入位置。
+只改预览后关闭不保存，实际候选窗应继续采用之前已保存的设置。“恢复默认”也需要
+点击“保存并应用”才会生效。
+
+自动验证已覆盖：保留模式/词频表路径/辅码/其他用户配置与注释、备份上一个版本、
+首次复制默认配置而不写包文件、原子写入失败恢复、当前候选和行缓冲保留、已提交文本
+不重复输出、损坏配置/无效颜色不应用。亚伟与独立候选扩展共用同一套设置面板。
+
+本节人工验收待用户执行，不把自动测试作为实际菜单和目标程序的人工验证结果。
+
+2026-10-12：全套 249 项自动测试通过；本机菜单 entry point 已安装并由 Plover registry
+识别；独立 wheel 中的面板、预览和配置保存也通过了不导入亚伟代码的隔离验证。

@@ -30,6 +30,11 @@ strokes that start a new word after a prefix miss are replayed once. Candidate
 window positioning uses `[candidate_window] position_mode`, `fixed_position`,
 and `margin`, alongside font and color settings.
 
+Plover's Tools menu includes **候选窗设置** for previewing and applying those
+appearance settings live. It saves only the popup section of the user
+configuration and retains the previous file as `.candidate-window.bak`.
+Candidate selection and buffered input are preserved during restyling.
+
 Only one extension should own a particular candidate marker. The Yawei adapter
 already uses this shared core; do not additionally enable this extension for
 the same `=YAW-CAND:` entries.

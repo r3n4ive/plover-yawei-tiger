@@ -8,6 +8,7 @@ from plover_multi_candidate import controller as ui
 from plover_multi_candidate.dictionary import CandidateItem
 from plover_multi_candidate.extension import MultiCandidateExtension
 from plover_multi_candidate.state import CandidateState
+from plover_multi_candidate.window_config import load_window_settings
 
 
 if ui.QFrame is None:
@@ -45,6 +46,152 @@ def popup(app):
         window.close()
         window.deleteLater()
     QCoreApplication.sendPostedEvents(None, QEvent.DeferredDelete)
+
+
+@pytest.fixture
+def settings_dialog(app, tmp_path, monkeypatch):
+    # All Qt tests share this module's one QApplication. Recreating Qt's font
+    # database in a second QApplication can crash QFontComboBox on Windows.
+    from plover_multi_candidate.window_settings import CandidateWindowSettings
+    from plover_yawei_tiger.extension import YaweiRimeExtension
+    from plover_yawei_tiger.native_candidates import CandidateIndex as YaweiCandidateIndex
+    from plover_yawei_tiger.native_candidates import NativeCandidateBackend
+    from plover_yawei_tiger.window_settings import YaweiCandidateWindowSettings
+
+    dialogs, extensions = [], []
+
+    class HiddenBridge(ui.CandidateUiBridge):
+        def _create(self):
+            super()._create()
+            self.controller.window.setAttribute(Qt.WA_DontShowOnScreen, True)
+
+    monkeypatch.setattr("plover_multi_candidate.extension.CandidateUiBridge", HiddenBridge)
+    monkeypatch.setattr("plover_yawei_tiger.extension.CandidateUiBridge", HiddenBridge)
+
+    def create(yawei=False, active=True):
+        path = tmp_path / ("yawei_tiger.cfg" if yawei else "multi_candidate.cfg")
+        path.write_text(
+            "[candidate_window]\nfont_family = Microsoft YaHei\nwidth = 360\n"
+            "[native_candidates]\npath = yw-native-candidates-wanxiang.json\n"
+            "[line_buffer]\nenabled = true\n[bindings]\ncommit = TEST\n",
+            encoding="utf-8",
+        )
+        env = "PLOVER_YAWEI_COMMAND_CONFIG" if yawei else "PLOVER_MULTI_CANDIDATE_CONFIG"
+        monkeypatch.setenv(env, str(path))
+        sent, deleted = [], []
+        engine = SimpleNamespace(
+            _send_string=sent.append, _send_backspaces=deleted.append,
+            dictionaries=SimpleNamespace(dicts=[]), _running_extensions={},
+        )
+        extension = YaweiRimeExtension(engine) if yawei else MultiCandidateExtension(engine)
+        if yawei:
+            extension.set_backend(NativeCandidateBackend(
+                YaweiCandidateIndex(), line_buffer_enabled=True,
+            ))
+            extension.enable_candidate_window()
+        else:
+            extension.backend.configure_line_buffer(enabled=True)
+            extension._attach_ui()
+        extension.backend.set_output(sent.append, deleted.append)
+        extension.backend.index.add(("WORD",), [CandidateItem("爸爸"), CandidateItem("粑粑")])
+        extension.backend.index.add(("UNIQUE",), [CandidateItem("唯一")])
+        if active:
+            engine._running_extensions["yawei-rime" if yawei else "multi-candidate"] = extension
+        dialog = YaweiCandidateWindowSettings(engine) if yawei else CandidateWindowSettings(engine)
+        dialog.setAttribute(Qt.WA_DontShowOnScreen, True)
+        dialogs.append(dialog)
+        extensions.append(extension)
+        app.processEvents()
+        return dialog, extension, path, sent, deleted
+
+    yield create
+    for extension in extensions:
+        extension.backend.close()
+        extension._candidate_controller.ui_bridge._close()
+    for dialog in dialogs:
+        dialog.close()
+        dialog.deleteLater()
+    QCoreApplication.sendPostedEvents(None, QEvent.DeferredDelete)
+
+
+@pytest.mark.parametrize("yawei", [False, True])
+def test_settings_preview_then_apply_keeps_candidates_buffer_and_output(settings_dialog, app, yawei):
+    dialog, extension, path, sent, deleted = settings_dialog(yawei=yawei)
+    extension.backend.consume(SimpleNamespace(rtfcre="WORD"), None)
+    old_state = extension.backend.state
+    dialog._fields["candidate_font_size"].setValue(18)
+    dialog._fields["width"].setValue(580)
+    dialog._fields["position_mode"].setCurrentIndex(1)
+    position = dialog._fields["fixed_position"]
+    position.setCurrentIndex(position.findData("top_right"))
+    assert dialog.preview.config["candidate_font_size"] == 18
+    assert extension._window_config["candidate_font_size"] != 18
+    assert not dialog.preview.isWindow()
+
+    dialog._save()
+    app.processEvents()
+    assert extension._window_config["fixed_position"] == "top_right"
+    window = extension._candidate_controller.window
+    assert window.config["candidate_font_size"] == 18
+    assert window.width() >= 580
+    assert extension.backend.state is old_state
+    assert extension.backend.state.candidates == ["爸爸", "粑粑"]
+    assert extension.backend.line_buffer.pending_text == "爸爸"
+    assert sent == deleted == []
+    assert "已保存并应用" in dialog.status.text()
+    assert "yw-native-candidates-wanxiang.json" in path.read_text(encoding="utf-8")
+    assert "commit = TEST" in path.read_text(encoding="utf-8")
+
+    extension.backend.command("commit")
+    assert sent == ["爸爸"]
+    # Restyling a state with a previously emitted commit must not emit it again.
+    extension.backend.configure_line_buffer(enabled=False)
+    extension.backend.consume(SimpleNamespace(rtfcre="UNIQUE"), None)
+    assert sent == ["爸爸", "唯一"]
+    dialog._save()
+    app.processEvents()
+    assert sent == ["爸爸", "唯一"]
+    assert window.isHidden()
+
+
+def test_settings_close_discards_preview_without_writing_or_applying(settings_dialog):
+    dialog, extension, path, sent, deleted = settings_dialog()
+    original = path.read_bytes()
+    dialog._fields["width"].setValue(620)
+    dialog.close()
+    assert path.read_bytes() == original
+    assert extension._window_config["width"] == 360
+    assert sent == deleted == []
+
+
+def test_settings_can_be_saved_before_extension_is_enabled(settings_dialog):
+    dialog, extension, path, sent, deleted = settings_dialog(active=False)
+    dialog._fields["width"].setValue(620)
+    dialog._save()
+    assert load_window_settings(path)["width"] == 620
+    assert extension._window_config["width"] == 360
+    assert "启用候选扩展后生效" in dialog.status.text()
+    assert sent == deleted == []
+
+
+@pytest.mark.parametrize("failure", ["invalid_color", "invalid_file"])
+def test_settings_save_failure_does_not_apply_partial_changes(
+        settings_dialog, monkeypatch, failure):
+    from plover_multi_candidate.window_settings import QMessageBox
+    dialog, extension, path, sent, deleted = settings_dialog()
+    warnings = []
+    monkeypatch.setattr(QMessageBox, "warning", lambda *args: warnings.append(args[-1]))
+    dialog._fields["width"].setValue(620)
+    if failure == "invalid_color":
+        dialog._fields["background"].setText("not a color")
+    else:
+        path.write_text("invalid file edited after opening dialog", encoding="utf-8")
+    before_save = path.read_bytes()
+    dialog._save()
+    assert warnings
+    assert extension._window_config["width"] == 360
+    assert path.read_bytes() == before_save
+    assert sent == deleted == []
 
 
 def test_independent_extension_delivers_buffer_and_candidates_to_qt(

@@ -20,6 +20,7 @@ The repository now has an initial `plover_multi_candidate` package. It owns reus
 - `CandidateState`, a theory-neutral state object.
 - `CandidateBackend`, the structural contract for state and candidate commands.
 - `CandidateController` and the optional Qt candidate window.
+- Popup appearance preview, live restyling, and the reusable Plover settings tool/config writer. A theory adapter supplies the user-config path and owning extension name.
 - `LineBuffer` and `TokenRecord`, with no Plover, Qt, Yawei, or Tiger dependency.
 - `CandidateFilter`, a small injection point for theory-specific filter strokes.
 - `CandidateCompositionBackend`, which owns outline accumulation, exact/prefix resolution, candidate choice, line-buffer editing, and generic candidate commands.

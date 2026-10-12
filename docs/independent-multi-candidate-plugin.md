@@ -96,6 +96,20 @@ The extension subscribes to backend state updates so new strokes, candidate
 selection, and commits all update the window. It does not need Yawei code to
 display candidates.
 
+The independent wheel also registers a **候选窗设置** tool in Plover's Tools
+menu. It previews font, color, sizing and placement changes before applying
+them. Saving changes updates only `[candidate_window]` in the user
+`multi_candidate.cfg`, retaining the previous file as
+`multi_candidate.cfg.candidate-window.bak`. The live extension receives the
+new presentation settings without rebuilding its backend, resetting its
+composition, or replaying output. Closing the dialog without saving discards
+the preview; restoring defaults also requires Save and Apply to take effect.
+
+Restart Plover once after installing the updated entry point to populate the
+menu. Subsequent appearance changes apply live. The Yawei distribution uses
+the same dialog through a path adapter and calls its menu entry
+**亚伟候选窗设置**; it saves to the Yawei user configuration instead.
+
 ## Local verification and installation boundary
 
 Build a local wheel from this repository with:

@@ -265,3 +265,13 @@ is accepted for compatibility but does not force or cap the popup's height.
 Removed chips hide immediately before deferred Qt deletion, so queued refreshes
 cannot paint old and new candidates together.
 
+Plover's Tools menu now includes **亚伟候选窗设置**, a live preview and settings
+dialog. Save and Apply updates the user configuration's popup section and
+restyles the existing window without resetting candidate/filter/buffer state
+or re-emitting committed text. Other configuration sections and their comments
+are retained. The previous user file is backed up as
+`yawei_tiger.cfg.candidate-window.bak`, and writes use an atomic replacement.
+When no user file exists, the packaged defaults are copied into a new user
+file; the packaged configuration is never edited. An invalid configuration or
+a failed save leaves the live settings unchanged.
+

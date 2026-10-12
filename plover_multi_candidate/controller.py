@@ -186,6 +186,7 @@ if QObject is not None:
         create_window = Signal()
         close_window = Signal()
         state_received = Signal(object)
+        config_received = Signal(object)
 
         def __init__(self, controller, app, window_config=None):
             super().__init__()
@@ -195,6 +196,7 @@ if QObject is not None:
             self.create_window.connect(self._create, Qt.QueuedConnection)
             self.close_window.connect(self._close, Qt.QueuedConnection)
             self.state_received.connect(self._state, Qt.QueuedConnection)
+            self.config_received.connect(self._configure, Qt.QueuedConnection)
 
         @Slot()
         def _create(self):
@@ -206,6 +208,12 @@ if QObject is not None:
         @Slot(object)
         def _state(self, state):
             self.controller._apply_state(state)
+
+        @Slot(object)
+        def _configure(self, values):
+            self.window_config = normalize_window_config(values)
+            if self.controller.window is not None:
+                self.controller.window.apply_config(self.window_config)
 
         @Slot()
         def _close(self):
@@ -266,6 +274,7 @@ if QFrame is not None:
             super().__init__()
             self.controller = controller
             self.config = normalize_window_config(config)
+            self._state = CandidateState()
             self._candidate_labels = []
             self.setWindowFlags(
                 Qt.Tool
@@ -278,9 +287,6 @@ if QFrame is not None:
             self.setObjectName("candidate_popup")
             self.setFocusPolicy(Qt.NoFocus)
             self._buffered = QLabel(self)
-            self._buffered.setFont(QFont(
-                self.config["font_family"], self.config["buffer_font_size"]
-            ))
             self._buffered.setTextFormat(Qt.PlainText)
             self._buffered.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
             # QLabel's automatic indent adds another half-character when CSS
@@ -290,9 +296,6 @@ if QFrame is not None:
             # Match the text inset of the candidate chips on the next line.
             self._buffered.setStyleSheet("padding: 0px 8px;")
             self._preedit = QLabel(self)
-            self._preedit.setFont(QFont(
-                self.config["font_family"], self.config["preedit_font_size"]
-            ))
             self._preedit.setTextFormat(Qt.PlainText)
             self._preedit.setIndent(0)
             self._preedit.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
@@ -317,6 +320,18 @@ if QFrame is not None:
             # unlike a seven-candidate state, shifting both rows out of line.
             self._current_layout.addStretch(1)
             layout.addWidget(self._current_row)
+            self.apply_config(self.config)
+
+        def apply_config(self, values):
+            """Restyle the existing popup without replaying backend output."""
+
+            self.config = normalize_window_config(values)
+            self._buffered.setFont(QFont(
+                self.config["font_family"], self.config["buffer_font_size"]
+            ))
+            self._preedit.setFont(QFont(
+                self.config["font_family"], self.config["preedit_font_size"]
+            ))
             self.setStyleSheet(
                 "QFrame#candidate_popup { background: %s; color: %s; "
                 "border: 1px solid #5f6368; border-radius: 6px; }"
@@ -329,8 +344,12 @@ if QFrame is not None:
             )
             self.setMinimumWidth(self.config["width"])
             self.ensurePolished()
+            self.set_state(self._state)
+            if self.isWindow() and not self.isHidden():
+                self._position_window()
 
         def set_state(self, state: CandidateState):
+            self._state = state
             buffered = getattr(state, "buffered", "")
             current_preedit = getattr(state, "current_preedit", "")
             self._buffered.setText(buffered)

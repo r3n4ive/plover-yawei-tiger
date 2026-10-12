@@ -232,6 +232,14 @@ class MultiCandidateExtension:
     def _install_hook(self):
         return install_pre_translate_hook(self.engine, self._before_translate)
 
+    def apply_candidate_window_config(self, values):
+        """Apply presentation only; keep composition and output history intact."""
+
+        self._window_config = normalize_window_config(values)
+        controller = self._candidate_controller
+        if controller is not None and controller.ui_bridge is not None:
+            controller.ui_bridge.config_received.emit(self._window_config)
+
     def _pass_to_plover(self):
         # Resolve owned text before a target-side edit, then forget its undo
         # history: the cursor and surrounding text may now change in Plover.

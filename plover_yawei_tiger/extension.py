@@ -818,6 +818,14 @@ class YaweiRimeExtension:
         log.info("Yawei native candidate window attached")
         return controller
 
+    def apply_candidate_window_config(self, values):
+        """Update the popup without changing the Chinese backend or buffer."""
+
+        self._window_config = normalize_window_config(values)
+        controller = self._candidate_controller
+        if controller is not None and controller.ui_bridge is not None:
+            controller.ui_bridge.config_received.emit(self._window_config)
+
     def set_mode_stroke(self, canonical_stroke: Optional[str]):
         """Configure a dedicated chord that toggles Chinese mode."""
 
