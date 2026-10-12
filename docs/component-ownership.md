@@ -47,6 +47,10 @@ A synthetic alternate-theory integration test exercises dictionary loading, a
 non-Tiger filter vocabulary, line buffering, and commit end to end. This proves
 the package contract, not support for a real second theory; add a real adapter
 when a concrete theory is selected. Before publishing separately, also decide
-which line-buffer commit policies should be configurable versus theory-owned.
+the package version and release process. Line-buffer prefix-miss commits,
+flushing before Plover actions, buffer visibility, command bindings, and
+window placement are already configurable through the independent extension.
+It replays a new word after a prefix miss and releases owned undo history at
+external Plover boundaries, using the same shared state machine as Yawei.
 
 The mode routing remains in `plover_yawei_tiger/extension.py`; it is explicitly Chinese-theory policy. When separating distributions, keep the mode bindings and no-auto-space policy in the Yawei/Chinese adapter and keep the generic candidate core free of that behavior.

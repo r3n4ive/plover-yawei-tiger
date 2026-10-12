@@ -23,6 +23,10 @@ from .routing import PreTranslateResult, install_pre_translate_hook
 
 
 MARKER = "=PLOVER-CAND:"
+COMMANDS = {
+    "commit", "force_commit", "flush", "force_unbind", "cancel",
+    "backspace", "delete", "undo", "backspace_word", "delete_word",
+} | {f"select_{index}" for index in range(1, 10)}
 
 
 def _user_config_dir() -> Path:
@@ -58,6 +62,14 @@ def _load_config():
         parser.read(path, encoding="utf-8")
     marker = parser.get("candidate", "marker", fallback=MARKER).strip() or MARKER
     line_buffer = parser.getboolean("candidate", "line_buffer", fallback=False)
+    buffer_policy = {
+        key: parser.getboolean("line_buffer", key, fallback=default)
+        for key, default in (
+            ("commit_on_prefix_miss", True),
+            ("flush_before_plover_command", True),
+            ("show_preedit", True),
+        )
+    }
     bindings = {}
     if parser.has_section("bindings"):
         # Keep the config readable as ``command = stroke``, matching Plover
@@ -65,9 +77,19 @@ def _load_config():
         for command, stroke in parser.items("bindings"):
             command = command.strip().lower()
             stroke = stroke.strip().upper()
-            if stroke and command:
-                bindings[stroke] = command
-    return marker, line_buffer, bindings
+            if not stroke:
+                continue
+            if command not in COMMANDS:
+                log.warning("Ignoring unknown multi-candidate command: %s", command)
+                continue
+            if stroke in bindings:
+                log.warning(
+                    "Ignoring duplicate multi-candidate stroke %s for %s; already bound to %s",
+                    stroke, command, bindings[stroke],
+                )
+                continue
+            bindings[stroke] = command
+    return marker, line_buffer, bindings, buffer_policy
 
 
 def _load_window_config():
@@ -83,7 +105,8 @@ def _load_window_config():
         for key in (
             "font_family", "buffer_font_size", "preedit_font_size",
             "candidate_font_size", "width", "height", "max_candidates",
-            "background", "foreground", "accent",
+            "background", "foreground", "accent", "position_mode",
+            "fixed_position", "margin",
         ):
             if key in section:
                 values[key] = section.get(key)
@@ -101,10 +124,10 @@ class MultiCandidateExtension:
 
     def __init__(self, engine):
         self.engine = engine
-        self.marker, line_buffer, self._command_strokes = _load_config()
+        self.marker, line_buffer, self._command_strokes, buffer_policy = _load_config()
         self._window_config = _load_window_config()
         self.backend = CandidateCompositionBackend(
-            CandidateIndex(), line_buffer_enabled=line_buffer
+            CandidateIndex(), line_buffer_enabled=line_buffer, **buffer_policy
         )
         self._unregister = None
         self._dictionary_filter = None
@@ -116,12 +139,17 @@ class MultiCandidateExtension:
     def _refresh(self, dictionaries):
         self._control_outlines.clear()
         self._control_prefixes.clear()
+        self._control_outline = ()
+        claimed = set()
         for dictionary in getattr(dictionaries, "dicts", ()):
             if not getattr(dictionary, "enabled", True):
                 continue
             for outline, value in dictionary.items():
+                key = tuple(str(stroke) for stroke in outline)
+                if key in claimed:
+                    continue
+                claimed.add(key)
                 if _is_control_mapping(value, self.marker):
-                    key = tuple(str(stroke) for stroke in outline)
                     self._control_outlines.add(key)
                     self._control_prefixes.update(key[:length] for length in range(1, len(key)))
         self.backend.index = CandidateIndex.from_dictionaries(
@@ -167,6 +195,7 @@ class MultiCandidateExtension:
         self._candidate_controller.ui_bridge = CandidateUiBridge(
             self._candidate_controller, QApplication.instance(), self._window_config
         )
+        self.backend.set_state_listener(self._candidate_controller.update)
         self._candidate_controller.ui_bridge.create_window.emit()
 
     def start(self):
@@ -201,36 +230,67 @@ class MultiCandidateExtension:
         self._control_outline = ()
 
     def _install_hook(self):
-        def before_translate(stroke):
-            name = str(stroke.rtfcre).upper()
-            command = self._command_strokes.get(name)
-            if command:
+        return install_pre_translate_hook(self.engine, self._before_translate)
+
+    def _pass_to_plover(self):
+        # Resolve owned text before a target-side edit, then forget its undo
+        # history: the cursor and surrounding text may now change in Plover.
+        if self.backend.flush_before_plover_command:
+            self.backend.command("flush")
+        self.backend.note_passthrough()
+        return PreTranslateResult.PASS
+
+    def _is_control(self, name):
+        # A failed continuation can itself start a new Plover control outline.
+        for trial in (self._control_outline + (name,), (name,)):
+            if trial in self._control_outlines:
+                self._control_outline = ()
+                return True
+            if trial in self._control_prefixes:
+                self._control_outline = trial
+                return True
+        self._control_outline = ()
+        return False
+
+    def _before_translate(self, stroke):
+        name = str(stroke.rtfcre).upper()
+        command = self._command_strokes.get(name)
+        if command:
+            try:
                 if command.startswith("select_"):
-                    try:
-                        index = int(command.split("_", 1)[1]) - 1
-                    except ValueError:
-                        return PreTranslateResult.PASS
                     if self.backend.state.candidates:
-                        self.backend.command("select", index)
+                        index = int(command.split("_", 1)[1]) - 1
+                        if index < len(self.backend.state.candidates):
+                            self.backend.command("select", index)
+                        self._control_outline = ()
                         return PreTranslateResult.CONSUMED
-                elif command in {"commit", "cancel", "backspace", "delete", "undo"}:
+                else:
+                    self.backend.last_command_handled = True
                     self.backend.command(command)
                     if self.backend.last_command_handled:
+                        self._control_outline = ()
                         return PreTranslateResult.CONSUMED
-            trial_control = self._control_outline + (name,)
-            if trial_control in self._control_outlines:
-                self._control_outline = ()
-                return PreTranslateResult.PASS
-            if trial_control in self._control_prefixes:
-                self._control_outline = trial_control
-                return PreTranslateResult.PASS
-            self._control_outline = ()
-            try:
-                consumed = self.backend.consume(stroke, self.engine)
+                    if command == "force_unbind":
+                        # An unfinished outline has no word to unbind. Keep
+                        # the prefix so its following stroke can complete it.
+                        self._control_outline = ()
+                        return PreTranslateResult.PASS
             except Exception:
-                log.error("multi-candidate stroke failed", exc_info=True)
-                consumed = False
-            return PreTranslateResult.CONSUMED if consumed else PreTranslateResult.PASS
-
-        return install_pre_translate_hook(self.engine, before_translate)
+                log.error("multi-candidate command failed", exc_info=True)
+                return self._pass_to_plover()
+        if self._is_control(name):
+            return self._pass_to_plover()
+        try:
+            if self.backend.consume(stroke, self.engine):
+                return PreTranslateResult.CONSUMED
+            # A prefix miss can resolve a previous word while this same stroke
+            # starts the next word. Replay it once, before Plover sees it.
+            replay = self.backend.reprocess
+            self.backend.reprocess = None
+            if replay is not None and self.backend.consume(replay, self.engine):
+                return PreTranslateResult.CONSUMED
+            self.backend.reprocess = None
+        except Exception:
+            log.error("multi-candidate stroke failed", exc_info=True)
+        return self._pass_to_plover()
 

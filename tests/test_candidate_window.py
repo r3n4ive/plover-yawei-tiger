@@ -1,8 +1,12 @@
 """Real Qt geometry regressions, without showing windows or taking focus."""
 
+from types import SimpleNamespace
+
 import pytest
 
 from plover_multi_candidate import controller as ui
+from plover_multi_candidate.dictionary import CandidateItem
+from plover_multi_candidate.extension import MultiCandidateExtension
 from plover_multi_candidate.state import CandidateState
 
 
@@ -41,6 +45,52 @@ def popup(app):
         window.close()
         window.deleteLater()
     QCoreApplication.sendPostedEvents(None, QEvent.DeferredDelete)
+
+
+def test_independent_extension_delivers_buffer_and_candidates_to_qt(
+        app, popup, tmp_path, monkeypatch):
+    monkeypatch.setenv("PLOVER_MULTI_CANDIDATE_CONFIG_DIR", str(tmp_path))
+    config = tmp_path / "multi_candidate.cfg"
+    config.write_text(
+        "[candidate]\nline_buffer = true\n[candidate_window]\n"
+        "position_mode = fixed\nfixed_position = top-right\nmargin = 20\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("PLOVER_MULTI_CANDIDATE_CONFIG", str(config))
+
+    class HiddenBridge(ui.CandidateUiBridge):
+        def _create(self):
+            if self.controller.window is None:
+                self.controller.window = popup(self.window_config)
+
+    monkeypatch.setattr("plover_multi_candidate.extension.CandidateUiBridge", HiddenBridge)
+    sent = []
+    extension = MultiCandidateExtension(SimpleNamespace(_send_string=sent.append))
+    extension.backend.set_output(sent.append)
+    extension.backend.index.add(("WORD",), [CandidateItem("爸爸"), CandidateItem("巴巴")])
+    extension._attach_ui()
+    app.processEvents()
+    window = extension._candidate_controller.window
+    try:
+        extension.backend.consume(SimpleNamespace(rtfcre="WORD"), None)
+        app.processEvents()
+        assert window.config["position_mode"] == "fixed"
+        assert window.config["fixed_position"] == "top_right"
+        assert window.config["margin"] == 20
+        assert not window.isHidden()
+        assert extension._candidate_controller.state.buffered == "爸爸"
+        assert extension._candidate_controller.state.candidates == ["爸爸", "巴巴"]
+        assert sent == []
+
+        extension.backend.command("select", 1)
+        app.processEvents()
+        assert extension._candidate_controller.state.buffered == "巴巴"
+        extension.backend.command("commit")
+        app.processEvents()
+        assert sent == ["巴巴"]
+        assert window.isHidden()
+    finally:
+        extension.backend.close()
 
 
 def assert_rows_fit(window):

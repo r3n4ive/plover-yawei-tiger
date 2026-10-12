@@ -652,6 +652,7 @@ tiger2.txt
 | machine/HID 解码 | `tests/test_machine.py` |
 | extension 路由和模式 | `tests/test_extension.py`、`tests/test_routing.py` |
 | Plover 5 完整启动、实验词库切换和恢复 | `tests/test_plover_startup.py` |
+| 独立候选插件：词边界、Plover 编辑同步、命令配置及卸载钩子 | `tests/test_multi_candidate_extension.py`、`tests/test_plover_startup.py` |
 | native 候选、辅码、顶屏、undo | `tests/test_native_candidates.py` |
 | 候选窗口控制器 | `tests/test_candidate.py` |
 | Qt 实际布局、字体、候选增减、单/双行切换与背景绘制 | `tests/test_candidate_window.py` |
@@ -673,6 +674,8 @@ tiger2.txt
 ## 12. 可选词频词库验收
 
 本节只测试多候选排序，仍走 native JSON，不启用 Rime。正式词库保留原始顺序。
+
+验收记录：2026-10-12 用户已确认当前实验表输入与选重正常，本节测试通过。
 
 ### 12.1 启用和重启
 
@@ -705,3 +708,22 @@ path = yw-native-candidates-wanxiang.json
 清空 `[native_candidates]` 的 `path` 后完全退出并重新启动 Plover。
 `A-BA` 应恢复“阿巴、阿爸、阿坝”；正式候选词典重新启用，实验表禁用。
 其他词典、行缓冲模式、符号和编辑键继续保持原配置。
+
+## 13. 独立候选插件的自动验收
+
+这一节用于将候选功能独立打包后的兼容性检查。当前亚伟输入已使用共享核心，
+不需要在本机再启用 `multi-candidate`，也不需要重复第 12 节的人工操作。
+
+使用小型测试词典和无输出副作用的设备适配，自动验证：
+
+1. 完整 Plover 启动后能识别候选协议，协议文本不会交给 Plover formatter。
+2. 前一个词仍是长词前缀、后一笔开始新词时，按配置提交或保留前词；后一笔只重新处理一次。
+3. 候选选择与行缓冲提交不重复输出；无候选时，原来的数字映射仍有效。
+4. 方向键或快捷键交给 Plover 前先同步缓冲；外部编辑之后，插件不再按旧文本长度回删。
+5. 强制解绑保留短词、阻止长 outline 合并；未完成前缀不会被解绑键丢弃。
+6. 已有的整词撤销、提交及目标侧删除可以独立配置，重复/未知绑定写入日志。
+7. Qt 窗口收到实时候选和缓冲更新，遵守固定位置配置，提交后收起。
+8. 停止扩展后移除 hook 和协议过滤器；独立 wheel 可从自身路径导入，不依赖亚伟代码。
+
+2026-10-12：全套自动测试 237 项通过，独立 wheel 构建通过。真实设备验收结果
+仍以各人工章节为准；本节不表示新增硬件支持或已经发布到 PyPI。
