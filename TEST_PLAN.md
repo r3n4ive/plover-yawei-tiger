@@ -50,7 +50,7 @@ canonical stroke、候选框状态、实际输出、是否重启后仍复现。
 在 Plover 自带 Python 中执行：
 
 ```powershell
-& "C:\Program Files\Open Steno Project\Plover 5.4.1\data\python.exe" -m pip install -e .
+& "C:\Program Files\Open Steno Project\Plover 5.4.1\data\python.exe" -m pip install -e ..\plover-multi-candidate -e .
 ```
 
 预期：命令成功结束，没有覆盖 Plover 安装目录中的核心文件。
@@ -652,17 +652,17 @@ tiger2.txt
 | machine/HID 解码 | `tests/test_machine.py` |
 | extension 路由和模式 | `tests/test_extension.py`、`tests/test_routing.py` |
 | Plover 5 完整启动、实验词库切换和恢复 | `tests/test_plover_startup.py` |
-| 独立候选插件：词边界、Plover 编辑同步、命令配置及卸载钩子 | `tests/test_multi_candidate_extension.py`、`tests/test_plover_startup.py` |
+| 独立候选插件：词边界、Plover 编辑同步、命令配置及卸载钩子 | 候选仓库 `tests/test_multi_candidate_extension.py`、`tests/test_plover_startup.py` |
 | native 候选、辅码、顶屏、undo | `tests/test_native_candidates.py` |
-| 候选窗口控制器 | `tests/test_candidate.py` |
-| Qt 实际布局、字体、候选增减、单/双行切换与背景绘制 | `tests/test_candidate_window.py` |
-| 候选窗设置面板、实时应用和用户配置备份 | `tests/test_candidate_window.py`、`tests/test_window_settings.py` |
+| 候选窗口控制器 | 候选仓库 `tests/test_candidate.py` |
+| Qt 实际布局、字体、候选增减、单/双行切换与背景绘制 | 候选仓库 `tests/test_candidate_window.py` |
+| 候选窗设置面板、实时应用和用户配置备份 | 本仓库 `tests/test_candidate_window.py`；候选仓库 `tests/test_candidate_window.py`、`tests/test_window_settings.py` |
 | Rime backend、连续音节、无空格 commit | `tests/test_rime_backend.py`、`tests/test_factory.py` |
 | 外挂拼音输出、模式选择 | `tests/test_pinyin_backend.py`、`tests/test_extension.py`、`tests/test_factory.py` |
 | runtime 下载/隔离编译 | `tests/test_librime_runtime.py` |
 | chord 到拼音/虎码映射 | `tests/test_stroke_mapping.py` |
 | JSON/Rime 词库构建 | `tests/test_build_dictionary.py`、`tests/test_build_native_candidates.py` |
-| E 迅手册语义 adapter（声韵码、声调筛选、行缓冲） | `tests/test_exun_adapter.py`、`docs/exun-reference-adapter.md` |
+| E 迅手册语义 adapter（声韵码、声调筛选、行缓冲） | 候选仓库 `tests/test_exun_adapter.py`、`docs/exun-reference-adapter.md` |
 
 代码回归命令：
 
@@ -715,6 +715,8 @@ path = yw-native-candidates-wanxiang.json
 这一节用于将候选功能独立打包后的兼容性检查。当前亚伟输入已使用共享核心，
 不需要在本机再启用 `multi-candidate`，也不需要重复第 12 节的人工操作。
 
+2026-10-13：候选源码、独立测试和 E 迅参考 adapter 已迁到 `plover-multi-candidate` 仓库。本仓库只保留中文/HID/理论适配测试；先安装本地候选包后分别运行两个项目的测试。中文仓库 175 项、候选仓库 75 项通过；两个 wheel 与源码包构建通过。候选 wheel 在禁止亚伟/HID 导入的隔离环境中通过全部 75 项测试。用户配置、辅码与实验词库文件哈希均未变化。
+
 使用小型测试词典和无输出副作用的设备适配，自动验证：
 
 1. 完整 Plover 启动后能识别候选协议，协议文本不会交给 Plover formatter。
@@ -753,3 +755,14 @@ path = yw-native-candidates-wanxiang.json
 
 2026-10-12：全套 249 项自动测试通过；本机菜单 entry point 已安装并由 Plover registry
 识别；独立 wheel 中的面板、预览和配置保存也通过了不导入亚伟代码的隔离验证。
+
+## 15. 两个项目拆分后的迁移检查
+
+包拆分保留配置路径、当前控制 stroke 和候选协议。两个仓库的安装步骤见 README；无需重新生成用户词库或覆盖 `yawei_tiger.cfg`。
+
+1. 完全退出并重新打开 Plover，确认机器仍是 `Yawei V3`，system 是 `yawei-tiger`，启用 `yawei-rime`。
+2. 不额外启用 `multi-candidate`。在空白记事本按 `IUNE-IU`、`XU-DZ`、`BA-BA`，缓冲显示“爸爸”，目标程序无文字。
+3. 按 `XNA-G`，只上屏一次“爸爸”。
+4. 打开“工具 → 亚伟候选窗设置”，确认原字体/位置设置仍被读取。
+
+这组检查验证迁移，不要求重复已通过的全部词频、数字和辅筛测试。人工结果待用户确认。

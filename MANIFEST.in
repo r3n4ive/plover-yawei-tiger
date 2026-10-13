@@ -1,4 +1,11 @@
 recursive-include plover_yawei_tiger/dictionaries *.json
 recursive-include plover_yawei_tiger/theory_map *.txt
 recursive-include plover_yawei_tiger/rime_data *.yaml
-prune tools
+include README.md
+include LICENSE
+include TEST_PLAN.md
+recursive-include docs *.md *.png
+recursive-include tools *.py *.txt *.dict *.json *.yaml *.sh
+recursive-include tests *.py
+prune build
+prune packaging

@@ -11,7 +11,29 @@
 - 中文：支持多候选、数字选重、首选嵌入/顶屏、虎码首末字筛选、连续辅码和中文行缓冲。
 - 候选窗：缓冲文本单独一行，候选横向排列；候选数量变化时保持左对齐，不会出现两行错位、旧候选重叠或文字裁切。
 - 配置：26 个虎码辅码键位和字符规则可以通过用户文件修改。
-- 回归测试：`180 passed`；真实亚伟设备和目标应用仍需要人工冒烟测试。
+- 项目拆分：中文 theory、词库、中文策略和亚伟 HID 保留在这里；通用候选、行缓冲和候选窗移到独立的 `plover-multi-candidate` 项目。
+- 回归测试：分别执行两个项目的自动测试；真实亚伟设备和目标应用仍需要人工冒烟测试。
+
+## 两个项目与开发安装
+
+| 项目 | 负责的内容 |
+| --- | --- |
+| 本项目 `plover-yawei-tiger` | 亚伟 HID、中文 theory/词库、拼音与虎码配置、中文空格规则、中英文及三种输出模式 |
+| [plover-multi-candidate](https://github.com/r3n4ive/plover-multi-candidate) | 通用候选协议、选重、筛选接口、自动绑定、行缓冲、候选窗和图形设置 |
+
+中文键位、辅码和词库均在本项目调整；不需要复制或修改通用候选核心。虎码筛选的具体规则仍属于中文适配层，通用插件提供筛选接口。两者通过正常的 Python 包依赖连接，不使用子模块或 Plover 分支。
+
+两个项目尚未发布到 PyPI。首次开发安装，请克隆两个仓库到相邻目录，然后从它们的父目录同时安装：
+
+```powershell
+git clone https://github.com/r3n4ive/plover-multi-candidate.git
+git clone https://github.com/r3n4ive/plover-yawei-tiger.git
+& 'C:\Program Files\Open Steno Project\Plover 5.4.1\data\python.exe' -m pip install -e .\plover-multi-candidate -e .\plover-yawei-tiger
+```
+
+当前本机中文仓库目录为 `repo-sync`，对应的第二个安装路径应写为 `.\repo-sync`。已经有完整 Plover/HID 环境时可以加 `--no-deps`，然后执行 `pip check`。直接安装中文包且未先安装候选包，会因候选插件尚未发布到 PyPI 而失败。
+
+重启 Plover 后继续使用 `Yawei V3`、`yawei-tiger`、`yawei-rime` 和原来的 `yawei_tiger.cfg`。`yawei-rime` 是兼容入口名；默认不启用 Rime。使用亚伟时只启用这一扩展，不另外启用 `multi-candidate`。迁移说明和修改入口见 [组件归属与拆分边界](docs/component-ownership.md)。
 
 ## 实际输入界面
 
@@ -101,17 +123,13 @@ machine 和 `yawei-tiger` system。Plover Plugin Manager 的在线列表来自 P
 
 候选 UI/state/token buffer、候选协议解析、outline 前缀索引、理论无关的 `CandidateFilter`
 接口和候选组合状态机已抽到 `plover_multi_candidate` 共享包。Yawei 适配层提供 `=YAW-CAND:`
-标记、中文普通词条识别和 Tiger 筛选；旧的 `NativeCandidateBackend` 导入路径仍兼容。共享包
-目前仍与 Yawei 同包发布，还不是可单独安装启用的 Plover extension。测试中已用虚构的非 Yawei
-适配器走通独立 marker、筛选、行缓冲和提交；这只验证共享接口，不代表已支持另一套真实理论。
-独立发布前仍应接入一套实际理论，并明确哪些行缓冲提交策略由插件配置、哪些属于理论策略。模块归属见
-[组件归属与拆分边界](docs/component-ownership.md)。
+标记、中文普通词条识别和 Tiger 筛选；旧的 `NativeCandidateBackend` 导入路径仍兼容。
+共享核心已迁到独立仓库，中文包只安装 `plover_yawei_tiger`，并声明依赖 `plover-multi-candidate>=0.1.0,<0.2`。
+通用项目拥有自己的测试和构建配置；亚伟项目保留硬件、适配层和兼容入口的回归测试。
 
-共享候选插件现在有独立的打包项目：
-`packaging/plover-multi-candidate`。它注册通用的 `multi-candidate` extension，
-只处理 `=PLOVER-CAND:` 候选协议、候选框和可选行缓冲，不包含亚伟键位、虎码辅码或中文空格规则。
-独立插件的配置和构建方式见
-[独立多候选插件说明](docs/independent-multi-candidate-plugin.md)。
+独立插件注册通用的 `multi-candidate` extension，默认处理 `=PLOVER-CAND:` 候选协议、候选框和可选行缓冲。
+亚伟适配层直接调用通用核心并使用 `=YAW-CAND:`，不需要启用第二个扩展。
+独立插件的配置和构建方式见 [独立插件说明](https://github.com/r3n4ive/plover-multi-candidate/blob/main/docs/plugin.md)。
 
 Rime 后端默认不启用；相关运行时和生成文件只在显式选择该路线时使用。设置
 `PLOVER_YAWEI_BACKEND=rime` 后，它会从 librime 官方发布页下载并校验固定版本
@@ -223,7 +241,7 @@ ctypes 绑定仍放在 `plover_yawei_tiger/` 下，但不会被默认路线调�
 在包含 Plover 的 Python 环境中执行：
 
 ```text
-python -m pip install -e .
+python -m pip install -e ../plover-multi-candidate -e .
 ```
 
 然后在 Plover 中选择 `Yawei V3`，启用 `yawei-rime` 扩展。默认会从已加载的
@@ -276,7 +294,7 @@ python tools/rime/sync_dictionary.py
 1. 候选排序已经支持可选的实际词/短语词频，但加权词库仍是实验构建，不直接覆盖默认发布词库。词频只用于多候选编码；唯一映射不需要词频。生成器支持 `--frequency-file`（`词语<TAB>次数`），并提供脚本把万象 `jichu.dict.yaml` 提取成只覆盖本项目词库的频率表；同权重保持原顺序，缺少权重的词也不会被猜测排序。`tools/compare_candidate_frequency.py` 可生成中文对比报告，展示覆盖率、首选变化及具体编码的前后顺序，候选增删与仅排序变化分开统计。详见 [原生候选协议](docs/native-candidate-protocol.md#review-before-activation)。
 2. 自动绑定/强制解绑键位仍是开发阶段绑定，最终 chord 需要和英文 Lapwing、符号表及编辑功能统一检查。
 3. Rime 整句和本地 LLM 重排是可选实验，不替换默认的确定性 native 路线。
-4. `plover-multi-candidate` 已有独立打包项目，已补齐失配 stroke 重处理、Plover 编辑边界同步、强制解绑/词级编辑配置和候选窗状态通知；窗口跟随/八方固定也可通过独立 cfg 设置。真实 Plover 与 Qt 回归已覆盖，详见 [独立候选插件](docs/independent-multi-candidate-plugin.md)。尚未作为单独插件正式发布。
+4. `plover-multi-candidate` 已拆成独立仓库，已补齐失配 stroke 重处理、Plover 编辑边界同步、强制解绑/词级编辑配置和候选窗状态通知；窗口跟随/八方固定可通过独立 cfg 设置。真实 Plover 与 Qt 回归已覆盖，详见 [独立候选插件](https://github.com/r3n4ive/plover-multi-candidate)。尚未发布到 PyPI。
 5. E 迅 adapter 目前是参考理论和自动化接口，不代表已经支持 E 迅硬件。
 
 可选词频表已覆盖 Plover 5 的完整启动、退出后重启和恢复正式词库流程。最小人工验收
@@ -360,7 +378,7 @@ Rime 候选框和选择功能曾做成原型，但当前已关闭该路线，避
 
 当前第一版已完成特殊值协议、候选索引、行缓冲显示、完整 outline 匹配、最长词边界、候选数字选择、左右手首末字筛选、同时双手筛选、连续辅码、首选嵌入/顶屏和候选上屏后的退格处理。迁移器从 `base.json` 生成了 36,606 个多候选组。26 个保留键位和字符虎码规则现在都由独立用户文件控制，改动后重启 Plover 即可生效。
 
-共享候选核心另有一套基于 E 迅手册的参考理论 adapter，记录了每手四排 `5/5/2/1` 的物理布局，并覆盖声韵码、9 个特殊音节码、30 个简码、声调筛选和行缓冲提交。它是自动化软件适配，不是 E 迅设备驱动或 USB/HID 支持；尚未完成设备报告到 Plover stroke 的映射，也没有 E 迅真机验证。详见 [E 迅参考 adapter](docs/exun-reference-adapter.md)。
+候选项目的 `examples/exun` 另有一套基于 E 迅手册的参考 adapter，记录了每手四排 `5/5/2/1` 的物理布局，并覆盖声韵码、9 个特殊音节码、30 个简码、声调筛选和行缓冲提交。它是软件参考，不是设备驱动或 USB/HID 支持；也没有 E 迅真机验证。详见 [E 迅参考 adapter](https://github.com/r3n4ive/plover-multi-candidate/blob/main/docs/exun-reference-adapter.md)。
 
 亚伟硬件与可选词频表的当前输入流程已通过人工验证。后续继续整理独立插件的分发和理论适配边界，并统一评估最终控制键位。默认发布词库仍保留源词条顺序；词频只通过显式的实验构建启用，不能把任一实验数据集直接视为最终排序。
 

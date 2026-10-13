@@ -11,7 +11,6 @@ from plover.config import Config, DictionaryConfig
 from plover.engine import MachineParams, StenoEngine
 from plover.registry import registry
 from plover.steno import Stroke
-from plover_multi_candidate.extension import MultiCandidateExtension
 
 from plover_yawei_tiger import system as yawei_system
 from plover_yawei_tiger.extension import YaweiRimeExtension
@@ -104,78 +103,6 @@ def startup_engine(tmp_path, monkeypatch):
 def write_dictionary(path, entries):
     path.write_text(json.dumps(entries, ensure_ascii=False), encoding="utf-8")
     return DictionaryConfig(str(path))
-
-
-@pytest.fixture
-def generic_startup_engine(tmp_path, monkeypatch):
-    registry.update()
-    registry.register_plugin("extension", "multi-candidate", MultiCandidateExtension)
-    previous_system = system.NAME
-    system.setup("English Stenotype")
-    monkeypatch.setattr(MultiCandidateExtension, "_attach_ui", lambda self: None)
-    cfg = tmp_path / "multi_candidate.cfg"
-    monkeypatch.setenv("PLOVER_MULTI_CANDIDATE_CONFIG", str(cfg))
-    monkeypatch.setenv("PLOVER_MULTI_CANDIDATE_CONFIG_DIR", str(tmp_path))
-    config = Config(str(tmp_path / "plover.cfg"))
-    config.update(
-        system_name="English Stenotype", enabled_extensions={"multi-candidate"},
-        log_file_name=str(tmp_path / "strokes.log"),
-    )
-    engine = StartupEngine(config)
-    yield engine, cfg
-    engine._stop_extensions(set(engine._running_extensions))
-    system.setup(previous_system or "English Stenotype")
-
-
-def test_independent_plugin_through_real_plover_routing(generic_startup_engine, tmp_path):
-    engine, cfg = generic_startup_engine
-    dictionary = write_dictionary(tmp_path / "generic.json", {
-        "S": '=PLOVER-CAND:["one","won"]',
-        "S/T": '=PLOVER-CAND:["phrase"]',
-        "K": '=PLOVER-CAND:["two","too"]',
-        "ST": "2",
-        "-R": "{#Left}",
-        "-F": "{^!}",
-    })
-    engine._config["dictionaries"] = [dictionary]
-    cfg.write_text(
-        "[candidate]\nline_buffer = true\n"
-        "[line_buffer]\ncommit_on_prefix_miss = false\n"
-        "[bindings]\nselect_2 = ST\ncommit = SKWR\n",
-        encoding="utf-8",
-    )
-    engine._start()
-    engine.drain_queue()
-    engine._set_output(True)
-    extension = engine._running_extensions["multi-candidate"]
-    assert engine.lookup(("S",)) is None  # Marked values never reach the formatter.
-
-    def stroke(name):
-        engine._on_stroked(Stroke.from_steno(name).steno_keys)
-
-    stroke("S")
-    stroke("K")  # Miss S/T, then consume K as a new word exactly once.
-    stroke("ST")
-    assert extension.backend.state.buffered == "onetoo"
-    assert engine.output_events == []
-    stroke("-R")
-    assert engine.output_events == [("text", "onetoo"), ("key", "Left")]
-    assert extension.backend.line_buffer.tokens == []
-    assert engine.output_backspaces == []
-
-    stroke("K")
-    stroke("ST")
-    stroke("SKWR")
-    assert engine.output_text == ["onetoo", "too"]
-    stroke("-F")
-    assert engine.output_text[-1] == "!"
-    stroke("ST")  # No menu: Plover's existing number translation survives.
-    assert engine.output_text[-1].strip() == "2"
-    assert not any("=PLOVER-CAND:" in text for text in engine.output_text)
-
-    engine._stop_extensions({"multi-candidate"})
-    assert not hasattr(engine, "_multi_candidate_callbacks")
-    assert engine.lookup(("S",)) == '=PLOVER-CAND:["one","won"]'
 
 
 @pytest.mark.parametrize("mode", ["native", "line_buffer"])

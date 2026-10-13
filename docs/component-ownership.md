@@ -1,57 +1,42 @@
-# Component Ownership and Split Boundary
+# 组件归属与两个项目的边界
 
-This note records where behavior belongs if the current Yawei implementation is later split into a Chinese theory project and a reusable multi-candidate Plover plugin.
+2026-10-13 按用户确认拆成两个项目，亚伟硬件留在中文 theory。通用代码已迁出中文源码树，中文包通过 plover-multi-candidate>=0.1.0,<0.2 依赖它。
 
-## Chinese theory / Yawei routing
+| 项目 | 本机目录 | 维护内容 |
+| --- | --- | --- |
+| [plover-yawei-tiger](https://github.com/r3n4ive/plover-yawei-tiger) | repo-sync | 中文 theory、词库/生成工具、拼音与虎码、中文策略、HID machine、模式路由 |
+| [plover-multi-candidate](https://github.com/r3n4ive/plover-multi-candidate) | plover-multi-candidate | 通用候选协议、索引、组合状态机、辅筛接口、行缓冲、候选窗/设置 |
 
-The following behavior is Chinese-theory-specific and belongs to the original Chinese theory project or its theory adapter:
+## 中文方案的修改入口
 
-- The Yawei chords that enter and leave Chinese mode (`IUNE-IU`, the observed reverse spelling `NEIU-IU`, and `IU-IUNE`).
-- The Chinese mode state and the rule that Chinese words do not receive automatic inter-word spaces.
-- Consuming the legacy mode chords instead of running the old global `{mode:set_space}` dictionary mappings.
-- Preserving explicit Plover spaces, punctuation, macros, and other translations while Chinese mode is active.
+- plover_yawei_tiger/system.py：逻辑键名、键位序、普通键盘映射和默认词典。
+- plover_yawei_tiger/machine.py：第三代亚伟 HID 报告及 Plover machine。HID 依赖仅属于这里。
+- plover_yawei_tiger/dictionaries/：中文 JSON 词库、功能词典和三模式标记词典。
+- tools/：中文词库生成、拼音/虎码转换、词频与冲突分析。
+- plover_yawei_tiger/theory_map/：默认拼音、辅码 chord 与虎码字符表。
+- plover_yawei_tiger/tiger_filter.py：首末字/连续虎码筛选。通用项目只规定筛选接口。
+- plover_yawei_tiger/yawei_tiger.cfg：包内默认设置；运行时优先读取用户文件。
+- plover_yawei_tiger/extension.py：中文模式、即时/行缓冲/外挂模式、中文自动空格策略和控制路由。
+- plover_yawei_tiger/native_candidates.py：中文候选 marker 与通用状态机的适配层。
 
-This is a Chinese orthography/input policy, not a requirement of candidate handling in general. A future extraction must not make the reusable candidate plugin globally change Plover's spacing state.
+中文的“词间不自动加空格”由本项目负责。显式空格、英文、符号与键盘宏仍交给 Plover。可选 Rime 实验和外挂拼音也留在本项目，默认仍是原生 JSON 候选路线。
 
-## Reusable multi-candidate plugin
+## 通用候选项目
 
-The repository now has an initial `plover_multi_candidate` package. It owns reusable primitives:
+独立项目拥有 CandidateState、CandidateBackend、CandidateIndex、CandidateCompositionBackend、CandidateFilter、LineBuffer/TokenRecord、CandidateController、候选窗和配置保存/设置工具。它不导入中文 theory，也不规定虎码、声调、中文空格或机器协议。
 
-- `CandidateState`, a theory-neutral state object.
-- `CandidateBackend`, the structural contract for state and candidate commands.
-- `CandidateController` and the optional Qt candidate window.
-- Popup appearance preview, live restyling, and the reusable Plover settings tool/config writer. A theory adapter supplies the user-config path and owning extension name.
-- `LineBuffer` and `TokenRecord`, with no Plover, Qt, Yawei, or Tiger dependency.
-- `CandidateFilter`, a small injection point for theory-specific filter strokes.
-- `CandidateCompositionBackend`, which owns outline accumulation, exact/prefix resolution, candidate choice, line-buffer editing, and generic candidate commands.
+独立 wheel 只包含 plover_multi_candidate。E 迅手册参考 adapter 移到它的 examples/exun，仅用于软件测试，不安装到候选核心。测试与说明也随对应组件迁移。核心 Git 历史通过 subtree 提取保留；不使用子模块，今后只在独立仓库修改核心。
 
-It must not assume Yawei mode chords, Chinese word boundaries, or a universal no-space policy. Other theories or languages may want ordinary Plover spacing or different commit behavior.
+## 安装与兼容
 
-## Current implementation location
+开发安装顺序为候选包、中文包；也可把两个本地路径在同一条 pip 命令中安装。两个项目还未发布到 PyPI，因此不要只依赖在线安装来解析候选包。
 
-The Yawei extension imports shared primitives from `plover_multi_candidate` directly. The old `plover_yawei_tiger.candidate`, `.line_buffer`, and `.rime_protocol.CandidateState` import paths remain compatibility shims for downstream code.
+亚伟继续使用 Yawei V3 machine、yawei-tiger system 和历史 yawei-rime extension。=YAW-CAND: marker、用户 yawei_tiger.cfg、辅码文件、词频表和当前开发按键保留。亚伟适配层调用独立核心，不额外启用 multi-candidate。旧 candidate、line_buffer、rime_protocol.CandidateState 导入路径继续作为薄兼容层。
 
-The reusable package now also owns candidate-value parsing and the exact/prefix outline index. Its parser accepts a configurable marker, and dictionary discovery accepts an optional predicate for ordinary single-value translations. `CandidateFilter` is the only theory-specific hook needed by the state machine: it resolves an opaque filter input and filters a candidate sequence. Yawei supplies `=YAW-CAND:` and its Chinese-translation predicate through a thin adapter in `plover_yawei_tiger/native_candidates.py`.
+独立候选项目单独使用时启用 multi-candidate，默认 marker 为 =PLOVER-CAND:，配置为 multi_candidate.cfg。同一个 marker 不应由两个扩展同时接管。
 
-Tiger auxiliary filtering and Yawei-specific auxiliary configuration live in `plover_yawei_tiger/tiger_filter.py`. The composition state machine now lives in `plover_multi_candidate/composition.py`; `plover_yawei_tiger/native_candidates.py` keeps the old `NativeCandidateBackend` API as an adapter that supplies Yawei dictionary parsing and the Tiger filter. Output remains injected through callbacks, while a Plover engine can still be passed as the legacy fallback target. The rule that starts a fresh composition after a new exact stroke can be configured, so theories differ without forking the state machine.
+## 验证与后续
 
-The repository now contains an independent packaging boundary under
-`packaging/plover-multi-candidate`. It publishes the theory-neutral package and
-registers a `multi-candidate` Plover extension. The wheel intentionally does
-not include Yawei or E-Xun adapters. A theory package supplies its own adapter,
-dictionary marker, spacing policy, and physical machine integration. The
-generic extension can be configured with `multi_candidate.cfg`; its command
-bindings use `command = stroke` entries and its default marker is
-`=PLOVER-CAND:`.
+分别执行两个仓库的 python -m pytest -q，并构建/检查 wheel 和源码包。候选仓库可在无中文包的环境中验证；中文仓库测试依赖安装后的候选包。迁移人工检查仅需重启 Plover，确认亚伟候选、行缓冲提交和设置菜单可用，无需重复全部词频实验。
 
-A synthetic alternate-theory integration test exercises dictionary loading, a
-non-Tiger filter vocabulary, line buffering, and commit end to end. This proves
-the package contract, not support for a real second theory; add a real adapter
-when a concrete theory is selected. Before publishing separately, also decide
-the package version and release process. Line-buffer prefix-miss commits,
-flushing before Plover actions, buffer visibility, command bindings, and
-window placement are already configurable through the independent extension.
-It replays a new word after a prefix miss and releases owned undo history at
-external Plover boundaries, using the same shared state machine as Yawei.
-
-The mode routing remains in `plover_yawei_tiger/extension.py`; it is explicitly Chinese-theory policy. When separating distributions, keep the mode bindings and no-auto-space policy in the Yawei/Chinese adapter and keep the generic candidate core free of that behavior.
+本次仅拆项目。PyPI/Plugin Manager 发布、最终控制键位和中文 theory 的具体调整仍待后续安排。
